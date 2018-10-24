@@ -1,0 +1,113 @@
+Actors:
+	Node(id, 
+	contactNode, 
+	successorId, 
+	successorRef, 
+	predecessorId, 
+	predecessorRef, 
+	finger[startId, nodeId, nodeRef])
+
+Messages:
+	FIND_SUCCESSOR
+	FIND_PREDECESSOR
+	UPDATE_PREDECESSOR
+	GET_PREDECESSOR
+	UPDATE_FINGER_TABLE
+	NOTIFY_SUCCESSOR
+
+//ask node n to find id's successor
+Upon find_successor(id) do:
+	(succId,succRef) <- trigger find_predecessor(id)
+	return (succId,succRef)
+
+//ask node n to find id's predecessor
+Upon find_predecessor(id) do:
+	n' = myself;
+	if (id !€ (n'.id, n'.successorId))
+		nodeRef <- closest_preceding_finger(id)
+		(nId,nRef) <- SendAndWait(FIND_PREDECESSOR, nodeRef, id)
+	return (n'.id,n'ref)
+
+Upon receive(FIND_SUCESSOR, id) do:
+	return trigger find_successor(id)
+
+Upon receive(FIND_PREDECESSOR, id) do:
+	return trigger find_predecessor(id)
+
+// return closest finger preceding id
+Upon closest_preceding_finger(id) do:
+	for(i<-m downto 1)
+		if(finger[i].nodeId € (myself.id,id))
+			return finger[i].nodeRef
+	return myself;
+
+
+
+//initialize finger table of local node;
+// contactNode is an arbitraty node already in the network
+Upon init_finger_table_request do:
+	finger[1].node <- trigger sendAndWait(FIND_SUCCESSOR, contactNode, finger[1].start)
+	(predecessorId, predecessorRef) <- trigger sendAndWait(UPDATE_PREDECESSOR, successorRef, myself.id, myselfRef)
+	for i = 1 to m - 1
+		if (finger[i+ 1].startId € [myself.id, finger[i].nodeId))
+			finger[i+ 1].nodeId <- finger[i].nodeId;
+			finger[i+ 1].nodeRef <- finger[i].nodeRef;
+		else
+			(finger[i+ 1].nodeId, finger[i+ 1].nodeRef) <- sendAndWait(FIND_SUCCESSOR, contactNode, finger[i+1].start)
+
+Upon receive(UPDATE_PREDECESSOR, nodeId, nodeRef) do:
+	(oldPredecessorId,oldPredecessorRef) <- (predecessorId, predecessorRef)
+	predecessorId <- nodeId
+	predecessorRef <- nodeRef
+	return (oldPredecessorId,oldPredecessorRef);
+
+Upon receive(FIND_SUCCESSOR, startNodeId) do:
+	(succId, succRef) <- trigger find_sucessor(startNodeId)
+	return (succId, succRef)
+
+
+//update all nodes whose finger tables should refer to n
+Upon update_others() do:
+for i<-1 to m
+	//find last node p whose ith finger might be myself
+	(pid,pref) <- tigger find_predecessor(myself.id - 2^(i-1))
+	send(UPDATE_FINGER_TABLE,pref,myself.id,myselfRef,i)
+
+Upon receive(UPDATE_FINGER_TABLE, nodeId, nodeRef, i) do:
+	trigger update_finger_table(nodeId,nodeRef,i)
+
+//if node(sId,sRef) is ith finger of myself, update my finger table with that node
+Upon update_finger_table(sId,sRef,i) do:
+if sId € (myself.id, finger[i].nodeId)
+		finger[i].nodeId = sId
+		finger[i].nodeRef = sRef
+		send(UPDATE_FINGER_TABLE,predecessor,sId,sRef,i) // update predecessor finger table
+
+Upon join(nodeRef)
+	predecessor <- nil
+	(successorId,successorRef) <- SendAndWait(FIND_SUCCESSOR, nodeRef, myself.id)
+
+//periodically verify node's immediante successor and tell successor about it
+Upon stabilize do:
+	(xId,xRef) <- trigger sendAndWait(GET_PREDECESSOR,successorRef)
+	if xId € (myself.id,successorId)
+		successorId <- xId
+		successorRef <- xRef
+	send(NOTIFY_SUCCESSOR, myself.id, myselfRef)
+
+Upon receive(GET_PREDECESSOR) do:
+	return predecessor;
+
+Upon receive(NOTIFY_SUCCESSOR, nodeId, nodeRef) do:
+	trigger notify(nodeId,nodeRef)
+
+//Node Node(nodeIf,nodeRef) thinks it might be our predecessor
+Upon notify(nodeId, nodeRef) do:
+	if (predecessor is nil or nodeId € (predecessorId,myself.id)
+		predecessorId <- nodeId
+		predecessorRef <- nodeRef
+
+//periodically refresh finger table entries
+Upon fix_fingers() do:
+	i = random index > 1 into finger[];
+	finger[i].node <- trigger find_successor(finger[i].startId)
