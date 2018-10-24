@@ -53,6 +53,7 @@ target/
 .project
 spring-*/src/main/java/META-INF/MANIFEST.MF
 .cache-main
+build.properties
 
 # IDEA artifacts and output dirs
 *.iml
