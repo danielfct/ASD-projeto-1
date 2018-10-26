@@ -12,6 +12,7 @@ import scala.concurrent.duration._
 import scala.concurrent.Await
 import akka.actor.ActorSystem
 import java.security.MessageDigest
+//import system.dispatcher
 
 final case class lookUp(n:Int)
 final case class lookUpFinish()
@@ -176,6 +177,11 @@ class ChordNode(id: Long, nodeCount: Int, contactNode: ActorRef) extends Actor
   //construct a finger table for this node instance
   val m: Int = (math.log(numNodes)/math.log(2)).toInt;
   var fingerTable = new Array[FingerEntry](m);
+  
+  // TODO: make the following 3 lines of code work...
+  //val interval = Duration(100, TimeUnit.SECONDS)
+  //system.scheduler.schedule(Duration(50, TimeUnit.SECONDS), interval, new Runnable{def run(){stabilize()}})
+  //system.scheduler.schedule(Duration(120, TimeUnit.SECONDS), interval, new Runnable{def run(){fix_fingers()}})
   
 /* 
  	//ask node n to find id's successor
