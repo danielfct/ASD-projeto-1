@@ -12,6 +12,9 @@ import scala.concurrent.duration._
 import scala.concurrent.Await
 import akka.actor.ActorSystem
 import java.security.MessageDigest
+import java.util.concurrent.TimeoutException
+import java.util.concurrent.TimeUnit
+
 //import system.dispatcher
 
 final case class lookUp(n:Int)
@@ -148,16 +151,17 @@ object ChordNode {
   final case class UpdatePredecessorResponse(oldPredecessorId: Long, oldPredecessorRef: ActorRef);
   final case object GetSuccessorRequest;
   final case class GetSuccessorResponse(successorId: Long, successorRef: ActorRef);
-  final case class GetPredecessorRequest();
+  final case object GetPredecessorRequest;
   final case class GetPredecessorResponse(predecessorId: Long, predecessorRef: ActorRef);
   final case class NotifySuccessorRequest(nodeId: Long, nodeRef: ActorRef);
   final case class NotifySuccessorResponse(); // ???
-  
+  final case object HeartbeatRequest;
+  final case class HeartbeatResponse();
 }
 
 class FingerEntry(var startId: Long, var nodeId: Long, var nodeRef: ActorRef);
 
-class ChordNode(id: Long, nodeCount: Int, contactNode: ActorRef) extends Actor
+class ChordNode(id: Long, nodeCount: Int, contactNode: ActorRef) extends Actor with ActorLogging
 {
   import ChordNode._
   var numNodes: Int = nodeCount;
@@ -166,6 +170,8 @@ class ChordNode(id: Long, nodeCount: Int, contactNode: ActorRef) extends Actor
   var successorRef: ActorRef = self;
   var predecessorId: Long = 0;
   var predecessorRef: ActorRef = null;
+  
+  var fix_fingers_next: Int = 0; // To be confirmed...
   
   var hopCount:Int = 0;
   
@@ -176,10 +182,13 @@ class ChordNode(id: Long, nodeCount: Int, contactNode: ActorRef) extends Actor
   val m: Int = (math.log(numNodes)/math.log(2)).toInt;
   var fingerTable = new Array[FingerEntry](m);
   
-  // TODO: make the following 3 lines of code work...
-  //val interval = Duration(100, TimeUnit.SECONDS)
-  //system.scheduler.schedule(Duration(50, TimeUnit.SECONDS), interval, new Runnable{def run(){stabilize()}})
-  //system.scheduler.schedule(Duration(120, TimeUnit.SECONDS), interval, new Runnable{def run(){fix_fingers()}})
+  val system = ActorSystem("chordNodeSystem") // Not sure if we can do this...
+  import system.dispatcher
+  
+  val interval = Duration(100, TimeUnit.SECONDS)
+  system.scheduler.schedule(Duration(50, TimeUnit.SECONDS), interval, new Runnable{def run(){stabilize()}})
+  system.scheduler.schedule(Duration(120, TimeUnit.SECONDS), interval, new Runnable{def run(){fix_fingers()}})
+  system.scheduler.schedule(Duration(120, TimeUnit.SECONDS), interval, new Runnable{def run(){check_predecessor()}})
   
 /* 
  	//ask node n to find id's successor
@@ -329,16 +338,39 @@ class ChordNode(id: Long, nodeCount: Int, contactNode: ActorRef) extends Actor
    }  
   
   /*
-  //periodically refresh finger table entries
-	Upon fix_fingers() do:
-	i = random index > 1 into finger[];
-	finger[i].node <- trigger find_successor(finger[i].startId)
+  // called periodically. refreshes finger table entries.
+  // next stores the index of the next finger to fix.
+  Upon n.fix_fingers() do:
+    next = next + 1;
+    if (next > m)
+    	next = 1;
+    finger[next] = find_successor(n + 2^(next−1));
   */
-  private def fix_fingers() = {
-    val i = Random.nextInt(m-2) + 1; //?? NOT SURE!! Paper: i = random index > 1 into finger[]
-    val (nId: Long, nRef: ActorRef) = find_successor(fingerTable(i).startId);
-    fingerTable(i).nodeId = nId;
-    fingerTable(i).nodeRef = nRef;
+  private def fix_fingers() = {  
+    fix_fingers_next = fix_fingers_next + 1;
+    if (fix_fingers_next > m) // To be confirmed...
+      fix_fingers_next = 1;
+    val (nId: Long, nRef: ActorRef) = find_successor(nodeId + Math.pow(2, fix_fingers_next - 1).toLong);
+    fingerTable(fix_fingers_next).nodeId = nId;
+    fingerTable(fix_fingers_next).nodeRef = nRef;
+  }
+  
+  //called periodically. checks whether predecessor has failed.
+  private def check_predecessor() = {
+    implicit val timeout = Timeout(60 seconds);
+    val future = predecessorRef ? HeartbeatRequest;
+    try {
+      val result = Await.result(future, timeout.duration).asInstanceOf[HeartbeatResponse]
+    } catch {
+      case e:TimeoutException => {
+        predecessorId = 0;
+        predecessorRef = null;
+      }
+      case e:Exception => {
+        log.info("check_predecessor() throwed unknown exception: " + e.getMessage())
+      }
+    }
+    
   }
   
   //let it receive requested key from master and return the result of search in finger table to caller
@@ -375,5 +407,7 @@ class ChordNode(id: Long, nodeCount: Int, contactNode: ActorRef) extends Actor
     case NotifySuccessorRequest(nId, nRef) =>
       notify(nId, nRef); //trigger notify(nodeId,nodeRef)
       sender() ! NotifySuccessorResponse
+    case HeartbeatRequest =>
+      sender() ! HeartbeatResponse
   }; 
 }
