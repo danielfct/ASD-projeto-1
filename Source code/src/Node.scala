@@ -150,8 +150,6 @@ object ChordNode {
   final case class GetSuccessorResponse(successorId: Long, successorRef: ActorRef);
   final case class GetPredecessorRequest();
   final case class GetPredecessorResponse(predecessorId: Long, predecessorRef: ActorRef);
-  final case class UpdateFingerTableRequest(nodeId: Long, nodeRef: ActorRef, i: Int);
-  final case class UpdateFingerTableResponse(); // ???
   final case class NotifySuccessorRequest(nodeId: Long, nodeRef: ActorRef);
   final case class NotifySuccessorResponse(); // ???
   
@@ -164,8 +162,8 @@ class ChordNode(id: Long, nodeCount: Int, contactNode: ActorRef) extends Actor
   import ChordNode._
   var numNodes: Int = nodeCount;
   var nodeId: Long = id;
-  var successorId: Long = 0;  
-  var successorRef: ActorRef = null;
+  var successorId: Long = nodeId;  
+  var successorRef: ActorRef = self;
   var predecessorId: Long = 0;
   var predecessorRef: ActorRef = null;
   
@@ -281,43 +279,18 @@ class ChordNode(id: Long, nodeCount: Int, contactNode: ActorRef) extends Actor
   }
   
   /*
-  //update all nodes whose finger tables should refer to n
-	Upon update_others() do:
-	for i<-1 to m
-	//find last node p whose ith finger might be myself
-	(pid,pref) <- tigger find_predecessor(myself.id - 2^(i-1))
-	send(UPDATE_FINGER_TABLE,pref,myself.id,myselfRef,i)
-  */
-  private def update_others() = {
-    for (i<-0 to m-1) {
-      val (_, pRef: ActorRef) = find_predecessor(nodeId - Math.pow(2,i-1).toLong);
-      pRef ! UpdateFingerTableRequest(nodeId, self, i);
-    }
-  }
-  
-  /*
-  //if node(sId,sRef) is ith finger of myself, update my finger table with that node
-	Upon update_finger_table(sId,sRef,i) do:
-	if sId € (myself.id, finger[i].nodeId)
-		finger[i].nodeId = sId
-		finger[i].nodeRef = sRef
-		send(UPDATE_FINGER_TABLE,predecessor,sId,sRef,i) // update predecessor finger table
-  */
-  private def update_finger_table(sId: Long, sRef: ActorRef, i: Int) = {
-    if (sId >= nodeId && sId <= fingerTable(i).nodeId) {
-      fingerTable(i).nodeId = sId;
-      fingerTable(i).nodeRef = sRef;
-      predecessorRef ! UpdateFingerTableRequest(sId, sRef, i);
-    }
-  }  
-  
-  /*
    Upon join(nodeRef)
 	predecessor <- nil
 	(successorId,successorRef) <- SendAndWait(FIND_SUCCESSOR, nodeRef, myself.id)
    */
   private def join(nodeRef: ActorRef) = {
-    //TODO
+    predecessorId = 0;
+    predecessorRef = null;
+    implicit val timeout = Timeout(60 seconds);
+    val future = contactNode ? FindSuccessorRequest(nodeId);
+    val result = Await.result(future, timeout.duration).asInstanceOf[FindSuccessorResponse];
+    successorId   = result.successorId;
+    successorRef = result.successorRef;
   } 
   
   /*
@@ -330,7 +303,15 @@ class ChordNode(id: Long, nodeCount: Int, contactNode: ActorRef) extends Actor
 	send(NOTIFY_SUCCESSOR, myself.id, myselfRef)
   */
   private def stabilize() = {
-    //TODO
+    implicit val timeout = Timeout(60 seconds);
+    val future = successorRef ? GetPredecessorRequest;
+    val result = Await.result(future, timeout.duration).asInstanceOf[GetPredecessorResponse];
+    if (result.predecessorId >= nodeId && result.predecessorId <= successorId) {
+      successorId = result.predecessorId;
+      successorRef = result.predecessorRef;
+    }
+    val future2 = successorRef ? NotifySuccessorRequest(nodeId, self);
+    val result2 = Await.result(future2, timeout.duration).asInstanceOf[NotifySuccessorResponse];
   } 
   
   /*
@@ -391,9 +372,6 @@ class ChordNode(id: Long, nodeCount: Int, contactNode: ActorRef) extends Actor
       sender() ! GetSuccessorResponse(successorId,successorRef) // return (successorId, successorRef);
     case GetPredecessorRequest =>
       sender() ! GetPredecessorResponse(predecessorId,predecessorRef) // return (predecessorId, predecessorRef);
-    case UpdateFingerTableRequest(nId, nRef, i) =>
-      update_finger_table(nId,nRef,i);
-      sender() ! UpdateFingerTableResponse // trigger update_finger_table(nodeId,nodeRef,i)
     case NotifySuccessorRequest(nId, nRef) =>
       notify(nId, nRef); //trigger notify(nodeId,nodeRef)
       sender() ! NotifySuccessorResponse
