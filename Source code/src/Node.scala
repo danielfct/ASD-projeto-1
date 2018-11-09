@@ -76,6 +76,24 @@ class ChordNode(myId: Int, m: Int) extends Actor with ActorLogging {
     Thread.sleep(1000)
     var res = false
     
+    // 4 >= 2 && 4 < 3               4 € [2, 3[ == [2, 3] false
+    // 4 >= 3 || 4 < 1               4 € [3, 1[ == [3, 0] true
+    // 3 >= 3 || 3 < 3               3 € ]3, 3] == [2, 3] true
+
+    start = if (includeStart) start else (if (start < end) start + 1 else start - 1); //TODO % Math.pow(2,m).toInt
+    end = if (includeEnd) end else (if (end > start) end - 1 else end +1 1); //TODO % Math.pow(2,m).toInt
+
+    if (start < end) {
+        res = value >= start && value < end;
+    } else if (end >= start) {
+        res = value >= start || value < end; 
+    } 
+
+    log.info("res={}", res)
+    return res;
+  }
+
+/*
     if (start == end && value != start && includeStart != includeEnd) {
       log.info("res={}", successor.id == myId)
       return successor.id == myId
@@ -98,7 +116,7 @@ class ChordNode(myId: Int, m: Int) extends Actor with ActorLogging {
     }
     log.info("res={}", res)
     return res;
-  }
+  }*/
   
   def getHigherId(startId: Int, oldId: Int, newId: Int) : Int = {
    if (startId != oldId && startId != newId) {
