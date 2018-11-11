@@ -4,6 +4,10 @@ version := "1.0"
 
 scalaVersion := "2.12.7"
 
-libraryDependencies += "com.typesafe.akka" %% "akka-actor" % "2.5.17"
+libraryDependencies ++= Seq(
+  "com.typesafe.akka" %% "akka-actor" % "2.5.18",
+  "com.typesafe.akka" %% "akka-testkit" % "2.5.18" % Test
+)
 
-resolvers += "Akka Snapshot Repository" at "http://repo.akka.io/snapshots/"
+libraryDependencies += "org.scalactic" %% "scalactic" % "3.0.5"
+libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.5" % "test"
