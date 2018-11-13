@@ -63,8 +63,6 @@ class SubscribeChord extends Actor with ActorLogging {
   def isInInterval(value: Int, start: Int, end: Int, includeStart: Boolean, includeEnd: Boolean) : Boolean = {
     //log.info("{}: isInInterval value={}, start={}, end={}", selfKey, value, start, end);
     //log.info("{}: isInInterval includeStart={}, includeEnd={}", selfKey, includeStart, includeEnd);
-    var intervalStart = if(includeStart) start else start + 1
-    var intervalEnd = if(includeEnd) end else end - 1
     var res = false;
     
       if (start == end && value != start && includeStart != includeEnd) {
