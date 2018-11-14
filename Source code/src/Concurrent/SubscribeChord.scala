@@ -6,6 +6,8 @@ import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 import java.util.HashMap
 import java.util.Map
+import java.security.MessageDigest
+import java.nio.ByteBuffer
 
 class SubscribeChord extends Actor with ActorLogging {
 
@@ -76,6 +78,11 @@ class SubscribeChord extends Actor with ActorLogging {
 
     //log.info("closest_preceding_finger: " + -1)
     selfRef
+  }
+  
+  def intSHA1Hash(s: String): Int = {
+    val sha1Bytes = MessageDigest.getInstance("SHA-1").digest(s.getBytes)
+    return ByteBuffer.wrap(sha1Bytes).getInt % ringSize
   }
 
   override def receive = {
