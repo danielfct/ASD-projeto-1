@@ -1,6 +1,7 @@
 package concurrent
 
 import akka.actor.{ActorRef, ActorSystem}
+import java.util.Map
 
 case class find_successor(id: Int, node: ActorRef, message: Option[Message])
 
@@ -43,5 +44,15 @@ case class debug()
 case class route(id: Int, message: Option[Message])
 
 case class messageDelivery(message: String)
+
+case class stabilizeTopicsAndSubs()
+
+case class stabilizeTopicsAndSubs_find_successor(id: Int, node: ActorRef, topic: String)
+
+case class confirmStabilizeTopicsAndSubs(topic: String)
+
+case class updateTopicsAndSubscribers(topic: String, subscribersOfTopic: Map[Integer,ActorRef]) 
+
+case class stabilizeTopicsAndSubs_successor_found(id: Int, node: ActorRef, topic: String)
 
 class Message(var topic: String, var msgType: String, var msg: String, var originalId: Int, var originalRef: ActorRef)

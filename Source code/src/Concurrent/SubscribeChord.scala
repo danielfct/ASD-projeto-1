@@ -8,6 +8,7 @@ import java.util.HashMap
 import java.util.Map
 import java.security.MessageDigest
 import java.nio.ByteBuffer
+import java.util.List
 
 class SubscribeChord extends Actor with ActorLogging {
 
@@ -36,6 +37,8 @@ class SubscribeChord extends Actor with ActorLogging {
   var next: Int = 0
   
   var topicsWithSubscriptions = new HashMap[String, Map[Integer, ActorRef]]
+  
+  var copyOftopicsWithSubscriptions = new HashMap[String, Map[Integer, ActorRef]]
 
   def isInInterval(value: Int, start: Int, end: Int, includeStart: Boolean, includeEnd: Boolean): Boolean = {
     //log.info("{}: isInInterval value={}, start={}, end={}", selfKey, value, start, end);
@@ -277,7 +280,45 @@ class SubscribeChord extends Actor with ActorLogging {
       predecessorTTL = System.currentTimeMillis() + 15000
 
     //log.info("yesIAm on self node " + selfKey + " gets new ttl: " + predecessorTTL)
-
+    
+   /* case stabilizeTopicsAndSubs_find_successor(id, node, topic) => {
+      if (isInInterval(id, selfKey, fingersKeys(0), false, true))
+        node ! stabilizeTopicsAndSubs_successor_found(fingersKeys(0), fingersRefs(0), topic)
+      else
+        closest_preceding_finger(id) ! stabilizeTopicsAndSubs_find_successor(id, node, topic)
+    }
+         
+    case stabilizeTopicsAndSubs() => {
+      val topics = topicsWithSubscriptions.keySet()
+      topics.forEach(topic => {
+        val topicHash = intSHA1Hash(topic)
+        self ! stabilizeTopicsAndSubs_find_successor(topicHash, selfRef, topic)
+      })
+    }
+    
+    case stabilizeTopicsAndSubs_successor_found(id, node, topic) => {
+      if (id != selfKey) {
+        val subscribers = topicsWithSubscriptions.get(topic)
+        copyOftopicsWithSubscriptions.put(topic, subscribers)
+        node ! updateTopicsAndSubscribers(topic, subscribers)
+      }
+    }
+    
+    case updateTopicsAndSubscribers(topic, subscribers) =>
+      if (!topicsWithSubscriptions.containsKey(topic))
+        topicsWithSubscriptions.put(topic, subscribers)
+      else topicsWithSubscriptions.get(topic).putAll(subscribers)
+      
+      sender() ! confirmStabilizeTopicsAndSubs(topic)
+      
+    case confirmStabilizeTopicsAndSubs(topic: String) =>
+      val stabCopyEntry = copyOftopicsWithSubscriptions.get(topic)
+      val stabEntry = topicsWithSubscriptions.get(topic)
+      copyOftopicsWithSubscriptions.get(topic).keySet().forEach(nodeId => {
+        stabCopyEntry.remove(nodeId)
+        stabEntry.remove(nodeId)
+      })
+*/
 
     case debug() =>
       log.info("m: " + m + " --- from node " + selfKey)
