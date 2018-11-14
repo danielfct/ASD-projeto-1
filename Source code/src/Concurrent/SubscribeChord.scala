@@ -1,9 +1,11 @@
-package Concurrent
+package concurrent
 
 import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem}
 //import scala.util.Random
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
+import java.util.HashMap
+import java.util.Map
 
 class SubscribeChord extends Actor with ActorLogging {
 
@@ -30,6 +32,8 @@ class SubscribeChord extends Actor with ActorLogging {
   var fingersKeys = new Array[Int](1)
 
   var next: Int = 0
+  
+  var topicsWithSubscriptions = new HashMap[String, Map[Integer, ActorRef]]
 
   def isInInterval(value: Int, start: Int, end: Int, includeStart: Boolean, includeEnd: Boolean): Boolean = {
     //log.info("{}: isInInterval value={}, start={}, end={}", selfKey, value, start, end);
@@ -75,17 +79,50 @@ class SubscribeChord extends Actor with ActorLogging {
   }
 
   override def receive = {
-    case find_successor(id, node) =>
+    case route (id, message) =>
+      if (id <= selfKey) {
+        message match {
+          case Some(message) => message.msgType match {
+            case "SUBSCRIBE" => 
+              var topicSubscribers = topicsWithSubscriptions.get(message.topic)
+              if (topicSubscribers == null) {
+                topicsWithSubscriptions.put(message.topic, new HashMap[Integer, ActorRef]())
+                topicSubscribers = topicsWithSubscriptions.get(message.topic)
+              }
+              
+              topicSubscribers.put(message.originalId, message.originalRef)  
+            case "UNSUBSCRIBE" =>
+              var topicSubscribers = topicsWithSubscriptions.get(message.topic)
+              if (topicSubscribers != null)
+                topicSubscribers.remove(message.originalId)
+            case "PUBLISH" =>
+              var subscribers = topicsWithSubscriptions.get(message.topic).values()
+              subscribers.forEach(sub => sub ! messageDevivery(message.msg))
+          }
+          case None => log.info("Warning: route got an empty message!");
+        }
+      } else selfRef ! find_successor(id, selfRef, message)
+      
+      
+    case messageDevivery(message) =>
+      log.info("{} got message = {}", selfKey, message)
+      
+    case find_successor(id, node, message) =>
       if (isInInterval(id, selfKey, fingersKeys(0), false, true)) {
         //log.info("find_successor on self node " + selfKey + " with id " + id + " result: " + fingersKeys(0))
 
-        node ! found_successor(fingersKeys(0), fingersRefs(0))
+        
+        message match {
+          case None => node ! found_successor(fingersKeys(0), fingersRefs(0))
+          case message => fingersRefs(0) ! route(id, message)
+        }
+        
       }
 
       else {
         //log.info("find_successor on self node " + selfKey + " with id " + id + " result: continue")
 
-        closest_preceding_finger(id) ! find_successor(id, node)
+        closest_preceding_finger(id) ! find_successor(id, node, message)
       }
 
     case found_successor(id, node) =>
@@ -144,7 +181,7 @@ class SubscribeChord extends Actor with ActorLogging {
 
       //log.info("join on self node " + selfKey + " with node id " + id)
 
-      selfRef ! find_successor(id, node)
+      selfRef ! find_successor(id, node, None)
 
     case stabilize() =>
       //log.info("stabilize on self node " + selfKey)

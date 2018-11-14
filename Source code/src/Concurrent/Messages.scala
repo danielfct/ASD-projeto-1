@@ -1,8 +1,8 @@
-package Concurrent
+package concurrent
 
 import akka.actor.{ActorRef, ActorSystem}
 
-case class find_successor(id: Int, node: ActorRef)
+case class find_successor(id: Int, node: ActorRef, message: Option[Message])
 
 case class found_successor(id: Int, node: ActorRef)
 
@@ -39,3 +39,9 @@ case class areYouAlive()
 case class yesIAm()
 
 case class debug()
+
+case class route(id: Int, message: Option[Message])
+
+case class messageDevivery(message: String)
+
+class Message(var topic: String, var msgType: String, var msg: String, var originalId: Int, var originalRef: ActorRef)
