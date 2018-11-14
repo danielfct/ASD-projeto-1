@@ -80,8 +80,8 @@ class SubscribeChord extends Actor with ActorLogging {
     selfRef
   }
   
-  def intSHA1Hash(s: String): Int = {
-    val sha1Bytes = MessageDigest.getInstance("SHA-1").digest(s.getBytes)
+  def intSHA1Hash(topic: String): Int = {
+    val sha1Bytes = MessageDigest.getInstance("SHA-1").digest(topic.getBytes)
     return ByteBuffer.wrap(sha1Bytes).getInt % ringSize
   }
 
