@@ -97,14 +97,14 @@ class SubscribeChord extends Actor with ActorLogging {
                 topicSubscribers.remove(message.originalId)
             case "PUBLISH" =>
               var subscribers = topicsWithSubscriptions.get(message.topic).values()
-              subscribers.forEach(sub => sub ! messageDevivery(message.msg))
+              subscribers.forEach(sub => sub ! messageDelivery(message.msg))
           }
           case None => log.info("Warning: route got an empty message!");
         }
       } else selfRef ! find_successor(id, selfRef, message)
       
       
-    case messageDevivery(message) =>
+    case messageDelivery(message) =>
       log.info("{} got message = {}", selfKey, message)
       
     case find_successor(id, node, message) =>

@@ -42,6 +42,6 @@ case class debug()
 
 case class route(id: Int, message: Option[Message])
 
-case class messageDevivery(message: String)
+case class messageDelivery(message: String)
 
 class Message(var topic: String, var msgType: String, var msg: String, var originalId: Int, var originalRef: ActorRef)
