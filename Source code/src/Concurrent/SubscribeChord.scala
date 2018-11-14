@@ -1,12 +1,15 @@
-package com.example
+package Concurrent
 
-import akka.actor.{Actor, ActorLogging, ActorRef}
-import scala.util.Random
+import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem}
+//import scala.util.Random
+import scala.concurrent.duration._
+import scala.concurrent.ExecutionContext.Implicits.global
+
 class SubscribeChord extends Actor with ActorLogging {
 
-  //var system: ActorSystem = null
+  var system: ActorSystem = null
 
-  val r = new Random
+  //val r = new Random
 
   var m: Int = 0
 
@@ -28,48 +31,16 @@ class SubscribeChord extends Actor with ActorLogging {
 
   var next: Int = 0
 
-  val stab = new Thread {
-    override def run: Unit = {
-      while (true) {
-        Thread.sleep(5000)
-        selfRef ! stabilize()
-      }
-    }
-  }
-  stab.start
-
-  val checkPre = new Thread {
-    override def run: Unit = {
-      while (true) {
-        Thread.sleep(15000)
-        selfRef ! check_predecessor()
-      }
-    }
-  }
-  checkPre.start
-
-  val beat = new Thread {
-    override def run: Unit = {
-      while (true) {
-        Thread.sleep(5000)
-        if (predecessorKey > 0) {
-          predecessorRef ! heartBeat()
-        }
-      }
-    }
-  }
-  beat.start
-  
-  def isInInterval(value: Int, start: Int, end: Int, includeStart: Boolean, includeEnd: Boolean) : Boolean = {
+  def isInInterval(value: Int, start: Int, end: Int, includeStart: Boolean, includeEnd: Boolean): Boolean = {
     //log.info("{}: isInInterval value={}, start={}, end={}", selfKey, value, start, end);
     //log.info("{}: isInInterval includeStart={}, includeEnd={}", selfKey, includeStart, includeEnd);
     var res = false;
-    
-      if (start == end && value != start && includeStart != includeEnd) {
+
+    if (start == end && value != start && includeStart != includeEnd) {
       //log.info("result true={}", res)
       return true
     }
-    
+
     if (includeStart) {
       if (includeEnd) { // [start,end]
         if (start <= end) res = value >= start && value <= end
@@ -79,39 +50,40 @@ class SubscribeChord extends Actor with ActorLogging {
         else res = value >= start || value < end
       }
     } else if (includeEnd) { // ]start,end]
-        if (start < end) res = value > start && value <= end
-        else res = value > start || value <= end
+      if (start < end) res = value > start && value <= end
+      else res = value > start || value <= end
     } else { // ]start,end[
-        if (start < end) res = value > start && value < end
-        else res = value > start || value < end
+      if (start < end) res = value > start && value < end
+      else res = value > start || value < end
     }
-      
+
     //log.info("res= {}", res)  
     return res
   }
 
   def closest_preceding_finger(id: Int): ActorRef = {
     for (i <- (m - 1) to 0 by -1) {
-      log.info("index: {}", i)
+      //log.info("index: {}", i)
       if (isInInterval(fingersKeys(i), selfKey, id, false, false)) {
-        log.info("closest_preceding_finger: " + i)
+        //log.info("closest_preceding_finger: " + i)
         return fingersRefs(i)
       }
     }
 
-    log.info("closest_preceding_finger: " + -1)
+    //log.info("closest_preceding_finger: " + -1)
     selfRef
   }
 
   override def receive = {
     case find_successor(id, node) =>
       if (isInInterval(id, selfKey, fingersKeys(0), false, true)) {
-        log.info("find_successor: " + fingersKeys(0))
+        //log.info("find_successor on self node " + selfKey + " with id " + id + " result: " + fingersKeys(0))
+
         node ! found_successor(fingersKeys(0), fingersRefs(0))
       }
 
       else {
-        log.info("find_successor: continue")
+        //log.info("find_successor on self node " + selfKey + " with id " + id + " result: continue")
 
         closest_preceding_finger(id) ! find_successor(id, node)
       }
@@ -119,17 +91,23 @@ class SubscribeChord extends Actor with ActorLogging {
     case found_successor(id, node) =>
       fingersRefs(0) = node
       fingersKeys(0) = id
-      log.info("{}: ok, my successor is {}", selfKey, id)
 
-    case create(factor, contactNode) =>
+    //log.info("found_successor on self node " + selfKey + " found: " + id)
+
+    //case create(sys, factor, contactNode) =>
+    case create(sys, factor, id, contactNode) =>
+      system = sys
+
       m = factor
 
       ringSize = Math.pow(2, m.toDouble).toInt
 
       selfRef = self
 
-      selfKey = r.nextInt(ringSize)
-      
+      //selfKey = r.nextInt(ringSize)
+
+      selfKey = id
+
       fingersRefs = new Array[ActorRef](m)
 
       fingersKeys = new Array[Int](m)
@@ -138,14 +116,19 @@ class SubscribeChord extends Actor with ActorLogging {
 
       predecessorKey = -1
 
-     for (i <- 0 until m - 1) {
+      for (i <- 0 until m - 1) {
         fingersRefs(i) = selfRef
         fingersKeys(i) = selfKey
       }
 
-      log.info("Create: " + selfKey)
-      
-     if (contactNode != null && contactNode != selfRef)
+      context.system.scheduler.schedule(0 milliseconds, 5000 milliseconds, selfRef, stabilize())
+      context.system.scheduler.schedule(0 milliseconds, 5000 milliseconds, selfRef, fix_fingers())
+      context.system.scheduler.schedule(0 milliseconds, 10000 milliseconds, selfRef, check_predecessor())
+      context.system.scheduler.schedule(0 milliseconds, 5000 milliseconds, selfRef, heartBeat())
+
+      //log.info("create self node: " + selfKey)
+
+      if (contactNode != null && contactNode != selfRef)
         selfRef ! initJoin(contactNode)
 
     case initJoin(contactNode) =>
@@ -153,55 +136,68 @@ class SubscribeChord extends Actor with ActorLogging {
 
       predecessorKey = -1
 
-      log.info("Init join: " + selfKey)
+      //log.info("initJoin on self node " + selfKey)
 
       contactNode ! join(selfKey, selfRef)
 
     case join(id, node) =>
 
-      log.info("Join: " + selfKey)
+      //log.info("join on self node " + selfKey + " with node id " + id)
 
       selfRef ! find_successor(id, node)
 
     case stabilize() =>
+      //log.info("stabilize on self node " + selfKey)
+
       fingersRefs(0) ! stabilizeAskSuccessorPredecessor()
 
     case stabilizeAskSuccessorPredecessor() =>
+      //log.info("stabilizeAskSuccessorPredecessor on self node " + selfKey)
+
       sender() ! stabilizeSendSuccessorPredecessor(predecessorKey, predecessorRef)
 
     case stabilizeSendSuccessorPredecessor(id, node) =>
       if (id != -1 && isInInterval(id, selfKey, fingersKeys(0), false, false)) {
         fingersRefs(0) = node
         fingersKeys(0) = id
-        log.info("{} stabilize ok, my successor is {}", selfKey, id)
+        //log.info("stabilizeSendSuccessorPredecessor on self node " + selfKey + " finds successor: " + id)
       }
 
-      if (fingersRefs(0) != selfRef)
+      if (fingersRefs(0) != selfRef) {
+        //log.info("start notification on self node " + selfKey)
+
         fingersRefs(0) ! notification(selfKey, selfRef)
+      }
 
     case notification(id, node) =>
       if (predecessorKey == -1 || isInInterval(id, predecessorKey, selfKey, false, false)) {
         predecessorRef = node
         predecessorKey = id
-        log.info("{} notification ok, my predecessor is {}", selfKey, id)
 
+        //log.info("notification on self node " + selfKey + " ok, my predecessor is: " + id)
       }
 
     case fix_fingers() =>
       next = next + 1
 
-      if (next > (m-1)) {
+      //log.info("fix_fingers on self node " + selfKey + " with next value of: " + next)
+
+      if (next > (m - 1)) {
         next = 0
       }
 
       selfRef ! find_finger_successor(next, selfKey + Math.pow(2, next - 1).toInt, selfRef)
 
     case find_finger_successor(index, id, node) =>
-      if (isInInterval(id,selfKey,fingersKeys(0),false,true)) {
+      if (isInInterval(id, selfKey, fingersKeys(0), false, true)) {
+        //log.info("find_finger_successor on self node " + selfKey + " found for index " + index + " and id: " + fingersKeys(0))
+
         node ! found_finger_successor(index, fingersKeys(0), fingersRefs(0))
       }
 
       else {
+        //log.info("find_finger_successor on self node " + selfKey + " found for index " + index + " and id: continue")
+
         closest_preceding_finger(id) ! find_finger_successor(index, id, node)
       }
 
@@ -210,23 +206,34 @@ class SubscribeChord extends Actor with ActorLogging {
 
       fingersKeys(index) = id
 
+    //log.info("found_finger_successor on self node " + selfKey + " found for index " + index + " and id: " + id)
+
+
     case check_predecessor() =>
       if (predecessorTTL < System.currentTimeMillis()) {
         predecessorRef = null
 
         predecessorKey = -1
+
+        //log.info("check_predecessor on self node " + selfKey + " timeout")
       }
 
     case heartBeat() =>
       if (predecessorKey > 0) {
+        //log.info("heartBeat on self node " + selfKey)
+
         predecessorRef ! areYouAlive()
       }
-      
+
     case areYouAlive() =>
+      //log.info("areYouAlive on self node " + selfKey)
       sender() ! yesIAm()
 
     case yesIAm() =>
       predecessorTTL = System.currentTimeMillis() + 15000
+
+    //log.info("yesIAm on self node " + selfKey + " gets new ttl: " + predecessorTTL)
+
 
     case debug() =>
       log.info("m: " + m + " --- from node " + selfKey)

@@ -1,6 +1,6 @@
-package com.example
+package Concurrent
 
-import akka.actor.{ActorRef}
+import akka.actor.{ActorRef, ActorSystem}
 
 case class find_successor(id: Int, node: ActorRef)
 
@@ -8,7 +8,7 @@ case class found_successor(id: Int, node: ActorRef)
 
 //case class create(sys: ActorSystem, m: Int, node: ActorRef)
 
-case class create(m: Int, node: ActorRef)
+case class create(sys: ActorSystem, m: Int, id: Int, node: ActorRef)
 
 case class initJoin(node: ActorRef)
 

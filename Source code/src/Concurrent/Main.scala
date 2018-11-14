@@ -1,24 +1,40 @@
-package com.example
+package Concurrent
 
 import akka.actor.{ActorSystem, Props}
-import akka.actor.actorRef2Scala
-
-//import scala.concurrent.duration._
+import scala.util.Random
 
 object Main {
   def main(args: Array[String]): Unit = {
 
+    val r = new Random
+
     val actorSystem = ActorSystem("SubscribeChord")
-    //import actorSystem.dispatcher
+    import actorSystem.dispatcher
 
     val factor: Int = 7
 
-    val actor1 = actorSystem.actorOf(Props[SubscribeChord], "Guy1")
-    val actor2 = actorSystem.actorOf(Props[SubscribeChord], "Guy2")
-    val actor3 = actorSystem.actorOf(Props[SubscribeChord], "Guy3")
+    val maxNumNodes = Math.pow(2, factor.toDouble).toInt
 
-    actor1 ! create(factor, actor1)
-    actor2 ! create(factor, actor1)
-    actor3 ! create(factor, actor1)
+    val ids: Array[Int] = new Array[Int](maxNumNodes)
+
+    val actorInit = actorSystem.actorOf(Props[SubscribeChord], "Initializer")
+
+    var identification: Int = r.nextInt(maxNumNodes)
+
+    ids(identification) = 1
+
+    actorInit ! create(actorSystem, factor, identification, actorInit)
+
+    for (i <- 0 until 100) {
+      identification = r.nextInt(maxNumNodes)
+
+      while (ids(identification) == 1) {
+        identification = r.nextInt(maxNumNodes)
+      }
+
+      ids(identification) = 1
+
+      actorSystem.actorOf(Props[SubscribeChord], "Node" + identification) ! create(actorSystem, factor, identification, actorInit)
+    }
   }
 }
