@@ -9,6 +9,7 @@ import java.util.Map
 import java.security.MessageDigest
 import java.nio.ByteBuffer
 import java.util.List
+import java.util.LinkedList
 
 class SubscribeChord extends Actor with ActorLogging {
 
@@ -38,7 +39,11 @@ class SubscribeChord extends Actor with ActorLogging {
   
   var topicsWithSubscriptions = new HashMap[String, Map[Integer, ActorRef]]
   
-  var copyOftopicsWithSubscriptions = new HashMap[String, Map[Integer, ActorRef]]
+  var subscriptionsAlreadySent = new LinkedList[Message]
+  
+  var subscriptionsTTL = new HashMap[String, Map[Integer, Long]]
+  
+  val TTL = 15000
 
   def isInInterval(value: Int, start: Int, end: Int, includeStart: Boolean, includeEnd: Boolean): Boolean = {
     //log.info("{}: isInInterval value={}, start={}, end={}", selfKey, value, start, end);
@@ -89,22 +94,36 @@ class SubscribeChord extends Actor with ActorLogging {
   }
 
   override def receive = {
+    
+    case sendMessage(topic: String, msgType: String, msg: String) =>
+      val m = new Message(topic, msgType, msg, selfKey, selfRef)
+      if (msgType == "SUBSCRIBE")
+        subscriptionsAlreadySent.add(m)
+      selfRef ! route(intSHA1Hash(topic), Some(m))
+    
     case route (id, message) =>
       if (id <= selfKey) {
         message match {
           case Some(message) => message.msgType match {
             case "SUBSCRIBE" => 
               var topicSubscribers = topicsWithSubscriptions.get(message.topic)
+              var topicSubscribersTTL = subscriptionsTTL.get(message.topic)
               if (topicSubscribers == null) {
                 topicsWithSubscriptions.put(message.topic, new HashMap[Integer, ActorRef]())
                 topicSubscribers = topicsWithSubscriptions.get(message.topic)
+                subscriptionsTTL.put(message.topic, new HashMap[Integer, Long]())
+                topicSubscribersTTL = subscriptionsTTL.get(message.topic)
               }
               
-              topicSubscribers.put(message.originalId, message.originalRef)  
+              topicSubscribers.put(message.originalId, message.originalRef)
+              topicSubscribersTTL.put(message.originalId, System.currentTimeMillis())
             case "UNSUBSCRIBE" =>
               var topicSubscribers = topicsWithSubscriptions.get(message.topic)
-              if (topicSubscribers != null)
+              var topicSubscribersTTL = subscriptionsTTL.get(message.topic)
+              if (topicSubscribers != null) {
                 topicSubscribers.remove(message.originalId)
+                topicSubscribersTTL.remove(message.originalId)
+              }
             case "PUBLISH" =>
               var subscribers = topicsWithSubscriptions.get(message.topic).values()
               subscribers.forEach(sub => sub ! messageDelivery(message.msg))
@@ -121,7 +140,6 @@ class SubscribeChord extends Actor with ActorLogging {
       if (isInInterval(id, selfKey, fingersKeys(0), false, true)) {
         //log.info("find_successor on self node " + selfKey + " with id " + id + " result: " + fingersKeys(0))
 
-        
         message match {
           case None => node ! found_successor(fingersKeys(0), fingersRefs(0))
           case message => fingersRefs(0) ! route(id, message)
@@ -172,6 +190,7 @@ class SubscribeChord extends Actor with ActorLogging {
       context.system.scheduler.schedule(0 milliseconds, 5000 milliseconds, selfRef, fix_fingers())
       context.system.scheduler.schedule(0 milliseconds, 10000 milliseconds, selfRef, check_predecessor())
       context.system.scheduler.schedule(0 milliseconds, 5000 milliseconds, selfRef, heartBeat())
+      context.system.scheduler.schedule(0 milliseconds, 5 seconds, selfRef, refreshMySubscriptions()) // TODO: find a good duration
 
       //log.info("create self node: " + selfKey)
 
@@ -280,46 +299,24 @@ class SubscribeChord extends Actor with ActorLogging {
       predecessorTTL = System.currentTimeMillis() + 15000
 
     //log.info("yesIAm on self node " + selfKey + " gets new ttl: " + predecessorTTL)
-    
-   /* case stabilizeTopicsAndSubs_find_successor(id, node, topic) => {
-      if (isInInterval(id, selfKey, fingersKeys(0), false, true))
-        node ! stabilizeTopicsAndSubs_successor_found(fingersKeys(0), fingersRefs(0), topic)
-      else
-        closest_preceding_finger(id) ! stabilizeTopicsAndSubs_find_successor(id, node, topic)
-    }
-         
-    case stabilizeTopicsAndSubs() => {
-      val topics = topicsWithSubscriptions.keySet()
-      topics.forEach(topic => {
-        val topicHash = intSHA1Hash(topic)
-        self ! stabilizeTopicsAndSubs_find_successor(topicHash, selfRef, topic)
-      })
-    }
-    
-    case stabilizeTopicsAndSubs_successor_found(id, node, topic) => {
-      if (id != selfKey) {
-        val subscribers = topicsWithSubscriptions.get(topic)
-        copyOftopicsWithSubscriptions.put(topic, subscribers)
-        node ! updateTopicsAndSubscribers(topic, subscribers)
-      }
-    }
-    
-    case updateTopicsAndSubscribers(topic, subscribers) =>
-      if (!topicsWithSubscriptions.containsKey(topic))
-        topicsWithSubscriptions.put(topic, subscribers)
-      else topicsWithSubscriptions.get(topic).putAll(subscribers)
       
-      sender() ! confirmStabilizeTopicsAndSubs(topic)
+    case refreshMySubscriptions() =>
+      subscriptionsAlreadySent.forEach(subscription => selfRef ! route(intSHA1Hash(subscription.topic), Some(subscription)))
       
-    case confirmStabilizeTopicsAndSubs(topic: String) =>
-      val stabCopyEntry = copyOftopicsWithSubscriptions.get(topic)
-      val stabEntry = topicsWithSubscriptions.get(topic)
-      copyOftopicsWithSubscriptions.get(topic).keySet().forEach(nodeId => {
-        stabCopyEntry.remove(nodeId)
-        stabEntry.remove(nodeId)
+    case checkMyTopicsSubscribersTTL() =>
+      subscriptionsTTL.keySet().forEach(topic => {
+        val subscriptionsTTLEntry = subscriptionsTTL.get(topic)
+        val topicsWithSubscriptionsEntry = topicsWithSubscriptions.get(topic)
+        
+        subscriptionsTTLEntry.keySet().forEach(subscriberId => {
+          if (subscriptionsTTLEntry.get(subscriberId) < System.currentTimeMillis() + TTL) {
+            subscriptionsTTLEntry.remove(subscriberId)
+            topicsWithSubscriptionsEntry.remove(subscriberId)
+          }
+        })
       })
-*/
-
+      
+    
     case debug() =>
       log.info("m: " + m + " --- from node " + selfKey)
       log.info("ringSize: " + ringSize + " --- from node " + selfKey)

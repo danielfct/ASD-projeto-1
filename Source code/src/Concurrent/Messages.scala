@@ -41,18 +41,14 @@ case class yesIAm()
 
 case class debug()
 
+case class sendMessage(topic: String, msgType: String, msg: String)
+
 case class route(id: Int, message: Option[Message])
 
 case class messageDelivery(message: String)
 
-case class stabilizeTopicsAndSubs()
+case class refreshMySubscriptions()
 
-case class stabilizeTopicsAndSubs_find_successor(id: Int, node: ActorRef, topic: String)
-
-case class confirmStabilizeTopicsAndSubs(topic: String)
-
-case class updateTopicsAndSubscribers(topic: String, subscribersOfTopic: Map[Integer,ActorRef]) 
-
-case class stabilizeTopicsAndSubs_successor_found(id: Int, node: ActorRef, topic: String)
+case class checkMyTopicsSubscribersTTL()
 
 class Message(var topic: String, var msgType: String, var msg: String, var originalId: Int, var originalRef: ActorRef)
