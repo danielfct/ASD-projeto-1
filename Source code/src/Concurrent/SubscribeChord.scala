@@ -312,7 +312,7 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
         val topicsWithSubscriptionsEntry = topicsWithSubscriptions.get(topic)
         
         subscriptionsTTLEntry.keySet().forEach(subscriberId => {
-          if (subscriptionsTTLEntry.get(subscriberId) < System.currentTimeMillis() + TTL) {
+          if (subscriptionsTTLEntry.get(subscriberId) + TTL < System.currentTimeMillis()) {
             subscriptionsTTLEntry.remove(subscriberId)
             topicsWithSubscriptionsEntry.remove(subscriberId)
           }
