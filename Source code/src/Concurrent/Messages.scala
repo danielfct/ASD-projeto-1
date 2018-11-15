@@ -9,7 +9,7 @@ case class found_successor(id: Int, node: ActorRef)
 
 //case class create(sys: ActorSystem, m: Int, node: ActorRef)
 
-case class create(sys: ActorSystem, m: Int, id: Int, node: ActorRef)
+case class create(m: Int, id: Int, node: ActorRef)
 
 case class initJoin(node: ActorRef)
 
@@ -52,3 +52,7 @@ case class refreshMySubscriptions()
 case class checkMyTopicsSubscribersTTL()
 
 class Message(var topic: String, var msgType: String, var msg: String, var originalId: Int, var originalRef: ActorRef)
+
+final case object CountMessage
+
+final case object PoisonPill

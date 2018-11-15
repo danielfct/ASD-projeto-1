@@ -10,10 +10,13 @@ import java.security.MessageDigest
 import java.nio.ByteBuffer
 import java.util.List
 import java.util.LinkedList
+import akka.actor.Props
 
-class SubscribeChord extends Actor with ActorLogging {
+object SubscribeChord {
+  def props(tester: ActorRef): Props = Props(new SubscribeChord(tester))
+}
 
-  var system: ActorSystem = null
+class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
 
   //val r = new Random
 
@@ -43,7 +46,7 @@ class SubscribeChord extends Actor with ActorLogging {
   
   var subscriptionsTTL = new HashMap[String, Map[Integer, Long]]
   
-  val TTL = 15000
+  val TTL = 15000 // TODO: find a good duration
 
   def isInInterval(value: Int, start: Int, end: Int, includeStart: Boolean, includeEnd: Boolean): Boolean = {
     //log.info("{}: isInInterval value={}, start={}, end={}", selfKey, value, start, end);
@@ -160,9 +163,7 @@ class SubscribeChord extends Actor with ActorLogging {
     //log.info("found_successor on self node " + selfKey + " found: " + id)
 
     //case create(sys, factor, contactNode) =>
-    case create(sys, factor, id, contactNode) =>
-      system = sys
-
+    case create(factor, id, contactNode) =>
       m = factor
 
       ringSize = Math.pow(2, m.toDouble).toInt
@@ -190,7 +191,9 @@ class SubscribeChord extends Actor with ActorLogging {
       context.system.scheduler.schedule(0 milliseconds, 5000 milliseconds, selfRef, fix_fingers())
       context.system.scheduler.schedule(0 milliseconds, 10000 milliseconds, selfRef, check_predecessor())
       context.system.scheduler.schedule(0 milliseconds, 5000 milliseconds, selfRef, heartBeat())
+      
       context.system.scheduler.schedule(0 milliseconds, 5 seconds, selfRef, refreshMySubscriptions()) // TODO: find a good duration
+      context.system.scheduler.schedule(0 milliseconds, 15 seconds, selfRef, checkMyTopicsSubscribersTTL()) // TODO: find a good duration
 
       //log.info("create self node: " + selfKey)
 
@@ -316,6 +319,8 @@ class SubscribeChord extends Actor with ActorLogging {
         })
       })
       
+    case PoisonPill =>
+      context.stop(self)
     
     case debug() =>
       log.info("m: " + m + " --- from node " + selfKey)
