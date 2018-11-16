@@ -32,11 +32,11 @@ case class found_finger_successor(index: Int, id: Int, node: ActorRef)
 
 case class check_predecessor()
 
-case class heartBeat()
+case class keepAlive()
 
-case class areYouAlive()
+case class keepAliveSignal()
 
-case class yesIAm()
+case class keepAliveReply()
 
 case class debug()
 

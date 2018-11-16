@@ -9,7 +9,6 @@ import scala.concurrent.ExecutionContext.Implicits.global
 class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Float) extends Actor with ActorLogging {
   val actorSystem = ActorSystem("PublishSubscribeChord")
   val r = new Random
-  val factor: Int = math.ceil(math.log(numMaxNodes / math.log(2))).toInt
   var currentNrMessages: Int = 0
   var currentNrFailedNodes: Int = 0
   val nodesAlive: mutable.HashMap[Int, ActorRef] = new mutable.HashMap[Int, ActorRef]()
@@ -19,24 +18,21 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
   var id: Int = r.nextInt(numMaxNodes)
   val actorInit: ActorRef = actorSystem.actorOf(SubscribeChord.props(self), "Initializer")
   context.watch(actorInit)
-  actorInit ! create(factor, id, actorInit)
+  actorInit ! create(numMaxNodes, id, actorInit)
   nodesAlive + (id -> actorInit)
   ids + (actorInit -> id)
 
   // criação dos nós
-  for (_ <- 0 until numMaxNodes) {
+  for (_ <- 0 until numMaxNodes-1) { //-1 para excluir o nó inicial
     do {
       id = r.nextInt(numMaxNodes)
     } while (nodesAlive contains id)
     val chordNode: ActorRef = actorSystem.actorOf(SubscribeChord.props(self), "Node" + id)
     context.watch(chordNode)
-    chordNode ! create(factor, id, actorInit)
+    chordNode ! create(numMaxNodes, id, actorInit)
     nodesAlive += (id -> chordNode)
     ids += (chordNode -> id)
   }
-
-  print("wtf")
-  val nodeFailureTask: Cancellable = context.system.scheduler.schedule(0 milliseconds, 100 milliseconds, getRandomNode, NodeFailure)
 
   val messageTypes: List[String] = List("SUBSCRIBE", "PUBLISH", "UNSUBSCRIBE")
   val topics: List[String] = List("Health Care", "Consumer Services", "Energy", "Finance", "Basic Industries",
@@ -57,101 +53,12 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
     "varius integer ac leo pellentesque ultrices mattis odio donec vitae",
     "et ultrices posuere cubilia curae nulla dapibus dolor vel est donec odio justo sollicitudin ut",
     "amet sapien dignissim vestibulum vestibulum ante ipsum primis in faucibus orci",
-    "sit amet sapien dignissim vestibulum vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere",
-    "varius nulla facilisi cras non velit nec nisi vulputate nonummy",
-    "donec pharetra magna vestibulum aliquet ultrices erat tortor sollicitudin mi sit amet lobortis sapien sapien non mi",
-    "consectetuer adipiscing elit proin risus praesent lectus vestibulum quam sapien varius ut blandit non interdum in ante vestibulum ante ipsum",
-    "vel enim sit amet nunc viverra dapibus nulla suscipit ligula in lacus curabitur at ipsum ac tellus semper interdum",
-    "vel est donec odio justo sollicitudin ut suscipit a feugiat et eros vestibulum ac est lacinia",
-    "pede justo eu massa donec dapibus duis at velit eu est",
-    "sed tristique in tempus sit amet sem fusce consequat nulla nisl",
-    "orci eget orci vehicula condimentum curabitur in libero ut massa volutpat convallis",
-    "vestibulum vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae nulla dapibus dolor vel est",
-    "est donec odio justo sollicitudin ut suscipit a feugiat et eros vestibulum ac est lacinia nisi",
-    "sapien dignissim vestibulum vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae nulla",
-    "justo nec condimentum neque sapien placerat ante nulla justo aliquam quis turpis eget elit sodales scelerisque",
-    "a ipsum integer a nibh in quis justo maecenas rhoncus aliquam lacus morbi quis tortor id nulla",
-    "suspendisse accumsan tortor quis turpis sed ante vivamus tortor duis mattis egestas metus aenean fermentum donec",
-    "bibendum imperdiet nullam orci pede venenatis non sodales sed tincidunt eu felis fusce posuere felis sed lacus",
-    "massa id nisl venenatis lacinia aenean sit amet justo morbi ut odio cras mi pede malesuada in imperdiet et commodo",
-    "mus etiam vel augue vestibulum rutrum rutrum neque aenean auctor gravida sem praesent id massa id nisl venenatis",
-    "id pretium iaculis diam erat fermentum justo nec condimentum neque sapien placerat ante nulla justo",
-    "ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae mauris viverra diam vitae quam suspendisse potenti nullam porttitor",
-    "diam vitae quam suspendisse potenti nullam porttitor lacus at turpis",
-    "curae nulla dapibus dolor vel est donec odio justo sollicitudin ut suscipit a feugiat et eros vestibulum",
-    "lacinia nisi venenatis tristique fusce congue diam id ornare imperdiet sapien urna pretium nisl",
-    "faucibus orci luctus et ultrices posuere cubilia curae mauris viverra diam vitae quam suspendisse potenti nullam porttitor lacus at turpis",
-    "accumsan odio curabitur convallis duis consequat dui nec nisi volutpat",
-    "iaculis diam erat fermentum justo nec condimentum neque sapien placerat ante nulla justo aliquam quis",
-    "congue etiam justo etiam pretium iaculis justo in hac habitasse platea",
-    "posuere metus vitae ipsum aliquam non mauris morbi non lectus aliquam sit amet diam in magna",
-    "nisi at nibh in hac habitasse platea dictumst aliquam augue quam sollicitudin vitae consectetuer eget rutrum",
-    "diam cras pellentesque volutpat dui maecenas tristique est et tempus semper est quam",
-    "odio donec vitae nisi nam ultrices libero non mattis pulvinar nulla pede ullamcorper augue a suscipit nulla elit ac nulla",
-    "nisi vulputate nonummy maecenas tincidunt lacus at velit vivamus vel nulla eget eros elementum pellentesque quisque porta volutpat erat",
-    "elit ac nulla sed vel enim sit amet nunc viverra dapibus nulla suscipit ligula in lacus curabitur at",
-    "vitae nisl aenean lectus pellentesque eget nunc donec quis orci eget orci",
-    "lectus in quam fringilla rhoncus mauris enim leo rhoncus sed vestibulum sit amet cursus id turpis integer aliquet massa id",
-    "ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae donec pharetra magna vestibulum aliquet",
-    "amet justo morbi ut odio cras mi pede malesuada in imperdiet et commodo vulputate justo in blandit ultrices enim",
-    "fringilla rhoncus mauris enim leo rhoncus sed vestibulum sit amet cursus id",
-    "eu mi nulla ac enim in tempor turpis nec euismod scelerisque quam turpis adipiscing lorem vitae mattis nibh",
-    "sed accumsan felis ut at dolor quis odio consequat varius integer ac leo pellentesque ultrices mattis",
-    "mi sit amet lobortis sapien sapien non mi integer ac neque duis bibendum morbi",
-    "auctor sed tristique in tempus sit amet sem fusce consequat nulla nisl nunc nisl duis bibendum felis sed interdum",
-    "urna ut tellus nulla ut erat id mauris vulputate elementum nullam varius nulla",
-    "quisque erat eros viverra eget congue eget semper rutrum nulla nunc purus phasellus in",
-    "morbi vel lectus in quam fringilla rhoncus mauris enim leo rhoncus sed vestibulum sit amet",
-    "sed vestibulum sit amet cursus id turpis integer aliquet massa id lobortis convallis",
-    "congue diam id ornare imperdiet sapien urna pretium nisl ut volutpat sapien arcu sed augue aliquam",
-    "massa volutpat convallis morbi odio odio elementum eu interdum eu tincidunt in leo maecenas pulvinar",
-    "est quam pharetra magna ac consequat metus sapien ut nunc vestibulum ante",
-    "duis at velit eu est congue elementum in hac habitasse",
-    "penatibus et magnis dis parturient montes nascetur ridiculus mus vivamus vestibulum",
-    "elementum eu interdum eu tincidunt in leo maecenas pulvinar lobortis est phasellus sit",
-    "libero non mattis pulvinar nulla pede ullamcorper augue a suscipit nulla elit ac nulla sed vel enim sit amet nunc",
-    "velit vivamus vel nulla eget eros elementum pellentesque quisque porta volutpat erat quisque",
-    "sit amet nulla quisque arcu libero rutrum ac lobortis vel dapibus at",
-    "consectetuer adipiscing elit proin interdum mauris non ligula pellentesque ultrices phasellus id sapien in sapien",
-    "maecenas leo odio condimentum id luctus nec molestie sed justo pellentesque viverra pede ac diam",
-    "rhoncus sed vestibulum sit amet cursus id turpis integer aliquet",
-    "vestibulum vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae nulla dapibus dolor vel est donec",
-    "aliquam lacus morbi quis tortor id nulla ultrices aliquet maecenas leo odio condimentum id luctus nec molestie sed",
-    "at nunc commodo placerat praesent blandit nam nulla integer pede justo lacinia eget tincidunt eget tempus vel pede morbi",
-    "sapien dignissim vestibulum vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae nulla dapibus dolor",
-    "velit donec diam neque vestibulum eget vulputate ut ultrices vel augue vestibulum ante ipsum primis in faucibus",
-    "massa tempor convallis nulla neque libero convallis eget eleifend luctus ultricies",
-    "lobortis convallis tortor risus dapibus augue vel accumsan tellus nisi eu orci mauris lacinia sapien quis libero",
-    "accumsan tortor quis turpis sed ante vivamus tortor duis mattis egestas metus aenean fermentum donec ut",
-    "nullam molestie nibh in lectus pellentesque at nulla suspendisse potenti cras in purus eu magna",
-    "turpis eget elit sodales scelerisque mauris sit amet eros suspendisse accumsan tortor quis turpis sed ante",
-    "mattis egestas metus aenean fermentum donec ut mauris eget massa tempor convallis nulla neque libero convallis eget",
-    "aliquam erat volutpat in congue etiam justo etiam pretium iaculis justo",
-    "ipsum aliquam non mauris morbi non lectus aliquam sit amet",
-    "donec quis orci eget orci vehicula condimentum curabitur in libero",
-    "vestibulum sit amet cursus id turpis integer aliquet massa id lobortis convallis tortor risus dapibus augue vel accumsan tellus nisi",
-    "in est risus auctor sed tristique in tempus sit amet sem fusce consequat nulla nisl nunc",
-    "eget massa tempor convallis nulla neque libero convallis eget eleifend luctus ultricies eu nibh",
-    "ut erat id mauris vulputate elementum nullam varius nulla facilisi cras non velit",
-    "phasellus id sapien in sapien iaculis congue vivamus metus arcu adipiscing molestie hendrerit",
-    "odio in hac habitasse platea dictumst maecenas ut massa quis",
-    "cras in purus eu magna vulputate luctus cum sociis natoque penatibus et magnis dis parturient montes nascetur ridiculus mus",
-    "duis at velit eu est congue elementum in hac habitasse platea dictumst morbi vestibulum velit id",
-    "ligula suspendisse ornare consequat lectus in est risus auctor sed tristique in tempus sit",
-    "nulla eget eros elementum pellentesque quisque porta volutpat erat quisque",
-    "luctus ultricies eu nibh quisque id justo sit amet sapien dignissim",
-    "pede ac diam cras pellentesque volutpat dui maecenas tristique est et tempus semper est quam pharetra",
-    "nonummy maecenas tincidunt lacus at velit vivamus vel nulla eget eros elementum pellentesque quisque porta volutpat erat quisque erat",
-    "nibh quisque id justo sit amet sapien dignissim vestibulum vestibulum ante ipsum primis in faucibus orci luctus et",
-    "lacus at turpis donec posuere metus vitae ipsum aliquam non mauris morbi non lectus aliquam sit amet diam in magna",
-    "justo sollicitudin ut suscipit a feugiat et eros vestibulum ac est lacinia nisi venenatis tristique fusce congue diam",
-    "eros suspendisse accumsan tortor quis turpis sed ante vivamus tortor duis mattis",
-    "ut tellus nulla ut erat id mauris vulputate elementum nullam",
-    "elit ac nulla sed vel enim sit amet nunc viverra",
-    "eget eleifend luctus ultricies eu nibh quisque id justo sit amet sapien dignissim vestibulum vestibulum ante ipsum primis",
-    "neque vestibulum eget vulputate ut ultrices vel augue vestibulum ante ipsum primis in faucibus orci",
-    "vulputate ut ultrices vel augue vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae donec pharetra",
-    "placerat ante nulla justo aliquam quis turpis eget elit sodales scelerisque mauris sit amet eros suspendisse accumsan tortor quis turpis")
+    "sit amet sapien dignissim vestibulum vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere")
+
+  var nodeFailureTask: Cancellable = _
+  if (nodeFailurePercentage > 0.0) {
+    nodeFailureTask = context.system.scheduler.schedule(0 milliseconds, 50 milliseconds, getRandomNode, NodeFailure)
+  }
 
   for (_ <- 0 until numRequests) {
     val randomNode: ActorRef = getRandomNode
@@ -193,14 +100,14 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
       nodesAlive -= id
       currentNrFailedNodes += 1
       print("node " + id + " failed")
-      if (currentNrFailedNodes > numMaxNodes * nodeFailurePercentage) {
+      if (currentNrFailedNodes > numMaxNodes * nodeFailurePercentage && nodeFailureTask != null) {
         nodeFailureTask.cancel()
       }
     }
     case CountMessage => currentNrMessages += 1
   }
 
-  print("Current number or failed nodes: " + currentNrFailedNodes + " (" + currentNrFailedNodes/numMaxNodes + "%)\n")
-  print("Total number of messages: " + currentNrMessages + " (" + currentNrMessages/numRequests + "%)")
+  println("Current number or failed nodes: " + currentNrFailedNodes + " (" + (currentNrFailedNodes/numMaxNodes).toDouble + "%)")
+  println("Total number of messages: " + currentNrMessages + " (" + (currentNrMessages/numRequests).toDouble + "%)")
 
 }

@@ -24,7 +24,7 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
 
   var ringSize: Int = 0
 
-  var selfRef: ActorRef = null
+  var self: ActorRef = null
 
   var selfKey: Int = 0
 
@@ -88,7 +88,7 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
     }
 
     //log.info("closest_preceding_finger: " + -1)
-    selfRef
+    self
   }
   
   def intSHA1Hash(topic: String): Int = {
@@ -99,10 +99,10 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
   override def receive = {
     
     case sendMessage(topic: String, msgType: String, msg: String) =>
-      val m = new Message(topic, msgType, msg, selfKey, selfRef)
+      val m = new Message(topic, msgType, msg, selfKey, self)
       if (msgType == "SUBSCRIBE")
         subscriptionsAlreadySent.add(m)
-      selfRef ! route(intSHA1Hash(topic), Some(m))
+      self ! route(intSHA1Hash(topic), Some(m))
     
     case route (id, message) =>
       if (id <= selfKey) {
@@ -133,7 +133,7 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
           }
           case None => log.info("Warning: route got an empty message!");
         }
-      } else selfRef ! find_successor(id, selfRef, message)
+      } else self ! find_successor(id, self, message)
       
       
     case messageDelivery(message) =>
@@ -168,7 +168,7 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
 
       ringSize = Math.pow(2, m.toDouble).toInt
 
-      selfRef = self
+      self = self
 
       //selfKey = r.nextInt(ringSize)
 
@@ -183,22 +183,22 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
       predecessorKey = -1
 
       for (i <- 0 until m - 1) {
-        fingersRefs(i) = selfRef
+        fingersRefs(i) = self
         fingersKeys(i) = selfKey
       }
 
-      context.system.scheduler.schedule(0 milliseconds, 5000 milliseconds, selfRef, stabilize())
-      context.system.scheduler.schedule(0 milliseconds, 5000 milliseconds, selfRef, fix_fingers())
-      context.system.scheduler.schedule(0 milliseconds, 10000 milliseconds, selfRef, check_predecessor())
-      context.system.scheduler.schedule(0 milliseconds, 5000 milliseconds, selfRef, heartBeat())
+      context.system.scheduler.schedule(0 milliseconds, 5000 milliseconds, self, stabilize())
+      context.system.scheduler.schedule(0 milliseconds, 5000 milliseconds, self, fix_fingers())
+      context.system.scheduler.schedule(0 milliseconds, 10000 milliseconds, self, check_predecessor())
+      context.system.scheduler.schedule(0 milliseconds, 5000 milliseconds, self, heartBeat())
       
-      context.system.scheduler.schedule(0 milliseconds, 5 seconds, selfRef, refreshMySubscriptions()) // TODO: find a good duration
-      context.system.scheduler.schedule(0 milliseconds, 15 seconds, selfRef, checkMyTopicsSubscribersTTL()) // TODO: find a good duration
+      context.system.scheduler.schedule(0 milliseconds, 5 seconds, self, refreshMySubscriptions()) // TODO: find a good duration
+      context.system.scheduler.schedule(0 milliseconds, 15 seconds, self, checkMyTopicsSubscribersTTL()) // TODO: find a good duration
 
       //log.info("create self node: " + selfKey)
 
-      if (contactNode != null && contactNode != selfRef)
-        selfRef ! initJoin(contactNode)
+      if (contactNode != null && contactNode != self)
+        self ! initJoin(contactNode)
 
     case initJoin(contactNode) =>
       predecessorRef = null
@@ -207,13 +207,13 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
 
       //log.info("initJoin on self node " + selfKey)
 
-      contactNode ! join(selfKey, selfRef)
+      contactNode ! join(selfKey, self)
 
     case join(id, node) =>
 
       //log.info("join on self node " + selfKey + " with node id " + id)
 
-      selfRef ! find_successor(id, node, None)
+      self ! find_successor(id, node, None)
 
     case stabilize() =>
       //log.info("stabilize on self node " + selfKey)
@@ -232,10 +232,10 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
         //log.info("stabilizeSendSuccessorPredecessor on self node " + selfKey + " finds successor: " + id)
       }
 
-      if (fingersRefs(0) != selfRef) {
+      if (fingersRefs(0) != self) {
         //log.info("start notification on self node " + selfKey)
 
-        fingersRefs(0) ! notification(selfKey, selfRef)
+        fingersRefs(0) ! notification(selfKey, self)
       }
 
     case notification(id, node) =>
@@ -255,7 +255,7 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
         next = 0
       }
 
-      selfRef ! find_finger_successor(next, selfKey + Math.pow(2, next - 1).toInt, selfRef)
+      self ! find_finger_successor(next, selfKey + Math.pow(2, next - 1).toInt, self)
 
     case find_finger_successor(index, id, node) =>
       if (isInInterval(id, selfKey, fingersKeys(0), false, true)) {
@@ -304,7 +304,7 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
     //log.info("yesIAm on self node " + selfKey + " gets new ttl: " + predecessorTTL)
       
     case refreshMySubscriptions() =>
-      subscriptionsAlreadySent.forEach(subscription => selfRef ! route(intSHA1Hash(subscription.topic), Some(subscription)))
+      subscriptionsAlreadySent.forEach(subscription => self ! route(intSHA1Hash(subscription.topic), Some(subscription)))
       
     case checkMyTopicsSubscribersTTL() =>
       subscriptionsTTL.keySet().forEach(topic => {
