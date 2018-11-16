@@ -1,12 +1,12 @@
 
-import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, Terminated}
+import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, Cancellable, Terminated}
 
 import scala.collection.mutable
 import scala.util.Random
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 
-class ChordTester(numMaxNodes: Int, numRequests: Int) extends Actor with ActorLogging {
+class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Float) extends Actor with ActorLogging {
   val actorSystem = ActorSystem("PublishSubscribeChord")
   val r = new Random
   val factor: Int = math.ceil(math.log(numMaxNodes / math.log(2))).toInt
@@ -36,7 +36,8 @@ class ChordTester(numMaxNodes: Int, numRequests: Int) extends Actor with ActorLo
     ids + (chordNode -> id)
   }
 
-  context.system.scheduler.schedule(0 milliseconds, 100 milliseconds, getRandomNode, NodeFailure) //TODO melhorar, pode resultar em loop infinito
+  print("wtf")
+  val nodeFailureTask: Cancellable = context.system.scheduler.schedule(0 milliseconds, 100 milliseconds, getRandomNode, NodeFailure)
 
   val messageTypes: List[String] = List("SUBSCRIBE", "PUBLISH", "UNSUBSCRIBE")
   val topics: List[String] = List("Health Care", "Consumer Services", "Energy", "Finance", "Basic Industries",
@@ -193,8 +194,14 @@ class ChordTester(numMaxNodes: Int, numRequests: Int) extends Actor with ActorLo
       nodesAlive -= id
       currentNrFailedNodes += 1
       print("node " + id + " failed")
+      if (currentNrFailedNodes > numMaxNodes * nodeFailurePercentage) {
+        nodeFailureTask.cancel()
+      }
     }
     case CountMessage => currentNrMessages += 1
   }
+
+  print("Current number or failed nodes: " + currentNrFailedNodes + " (" + currentNrFailedNodes/numMaxNodes + "%)")
+  print("Total number of messages: " + currentNrMessages + " (" + currentNrMessages/numRequests + "%)")
 
 }
