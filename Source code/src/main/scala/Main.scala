@@ -8,9 +8,9 @@ object Main {
       println("Usage: sbt run NumberOfNodes NumberOfRequests NodeFailurePercentage")
       System.exit(1)
     }
-    val maxNrNodes: Int = math.min(8, args(0).toInt)
-    val numberOfRequests: Int = args(1).toInt
-    val nodeFailurePercentage: Float = math.min(0.9f, args(1).toFloat)
+    val maxNrNodes: Int = math.max(8, args(0).toInt)
+    val numberOfRequests: Int = math.max(10, args(1).toInt)
+    val nodeFailurePercentage: Float = math.min(args(1).toFloat, 0.9f)
     */
     val maxNrNodes: Int = 128
     val numberOfRequests: Int = 10

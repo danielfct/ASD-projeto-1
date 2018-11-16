@@ -28,12 +28,11 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
     do {
       id = r.nextInt(numMaxNodes)
     } while (nodesAlive contains id)
-    if (nodesAlive contains id) println(id + " true") else println(id + " false")
     val chordNode: ActorRef = actorSystem.actorOf(SubscribeChord.props(self), "Node" + id)
     context.watch(chordNode)
     chordNode ! create(factor, id, actorInit)
-    nodesAlive + (id -> chordNode)
-    ids + (chordNode -> id)
+    nodesAlive += (id -> chordNode)
+    ids += (chordNode -> id)
   }
 
   print("wtf")
@@ -201,7 +200,7 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
     case CountMessage => currentNrMessages += 1
   }
 
-  print("Current number or failed nodes: " + currentNrFailedNodes + " (" + currentNrFailedNodes/numMaxNodes + "%)")
+  print("Current number or failed nodes: " + currentNrFailedNodes + " (" + currentNrFailedNodes/numMaxNodes + "%)\n")
   print("Total number of messages: " + currentNrMessages + " (" + currentNrMessages/numRequests + "%)")
 
 }
