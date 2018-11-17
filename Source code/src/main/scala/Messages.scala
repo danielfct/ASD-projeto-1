@@ -57,3 +57,5 @@ final case object CountMessage
 final case object NodeFailure
 
 case class registerEvent(from: Int, to: Int, msgType: String, topic: String, topicId: Int, message: String)
+
+case class registerDelivery(id: Int, message: String)

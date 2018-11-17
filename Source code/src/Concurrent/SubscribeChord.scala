@@ -120,6 +120,7 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
 
     case messageDelivery(message) =>
       log.info("{} got message = {}", selfKey, message)
+      tester ! registerDelivery(selfKey, message)
 
     case find_successor(id, node, message) =>
       if (isInInterval(id, selfKey, fingersKeys(0), includeStart = false, includeEnd = true)) {
@@ -152,12 +153,12 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
         fingersRefs(i) = self
         fingersKeys(i) = selfKey
       }
-      context.system.scheduler.schedule(0 milliseconds, 5000 milliseconds, self, stabilize())
-      context.system.scheduler.schedule(0 milliseconds, 5000 milliseconds, self, fix_fingers())
-      context.system.scheduler.schedule(0 milliseconds, 10000 milliseconds, self, check_predecessor())
-      context.system.scheduler.schedule(0 milliseconds, 5000 milliseconds, self, keepAlive())
-      context.system.scheduler.schedule(0 milliseconds, 5 seconds, self, refreshMySubscriptions()) // TODO: find a good duration
-      context.system.scheduler.schedule(0 milliseconds, 15 seconds, self, checkMyTopicsSubscribersTTL()) // TODO: find a good duration
+      context.system.scheduler.schedule(0 milliseconds, 5 milliseconds, self, stabilize())
+      context.system.scheduler.schedule(0 milliseconds, 6 milliseconds, self, fix_fingers())
+      context.system.scheduler.schedule(0 milliseconds, 7 seconds, self, check_predecessor())
+      context.system.scheduler.schedule(0 milliseconds, 2 seconds, self, keepAlive())
+      context.system.scheduler.schedule(0 milliseconds, 5 seconds, self, refreshMySubscriptions())
+      context.system.scheduler.schedule(0 milliseconds, 15 seconds, self, checkMyTopicsSubscribersTTL())
       //log.info("create self node: " + selfKey)
       if (contactNode != null && contactNode != self)
         self ! initJoin(contactNode)
@@ -173,8 +174,10 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
       self ! find_successor(id, node, None)
 
     case stabilize() =>
-      //log.info("stabilize on self node " + selfKey)
-      fingersRefs(0) ! stabilizeAskSuccessorPredecessor()
+      if (fingersRefs(0) != null) {
+        //log.info("stabilize on self node " + selfKey)
+        fingersRefs(0) ! stabilizeAskSuccessorPredecessor()
+      }
 
     case stabilizeAskSuccessorPredecessor() =>
       //log.info("stabilizeAskSuccessorPredecessor on self node " + selfKey)
@@ -204,7 +207,7 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
       if (next > (m - 1)) {
         next = 0
       }
-      self ! find_finger_successor(next, selfKey + Math.pow(2, next - 1).toInt, self)
+      self ! find_finger_successor(next, selfKey + Math.pow(2, next).toInt, self)
 
     case find_finger_successor(index, id, node) =>
       if (isInInterval(id, selfKey, fingersKeys(0), includeStart = false, includeEnd = true)) {

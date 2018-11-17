@@ -5,9 +5,8 @@ import scala.collection.mutable
 import scala.util.Random
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
-import java.io.PrintWriter
-import java.io.File
 import java.util.LinkedList
+import java.io.FileWriter
 
 object ChordTester {
   final case object Subscribe
@@ -27,7 +26,6 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
   var currentNrRequests : Int = 0
   val nodesAlive: mutable.HashMap[Int, ActorRef] = new mutable.HashMap[Int, ActorRef]()
   val ids: mutable.HashMap[ActorRef, Int] = new mutable.HashMap[ActorRef, Int]()
-  var timeToWaitToPublish : Long = 0
   var logOfEvents = new LinkedList[String]
 
   // nó inicial
@@ -35,9 +33,10 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
   val actorInit: ActorRef = actorSystem.actorOf(SubscribeChord.props(self), "Initializer")
   context.watch(actorInit)
   actorInit ! create(numMaxNodes, id, actorInit)
-  nodesAlive + (id -> actorInit)
-  ids + (actorInit -> id)
+  nodesAlive += (id -> actorInit)
+  ids += (actorInit -> id)
 
+  log.info("Creating nodes...")
   // criação dos nós
   for (_ <- 0 until numMaxNodes-1) { //-1 para excluir o nó inicial
     do {
@@ -50,8 +49,7 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
     ids += (chordNode -> id)
   }
   
-  context.system.scheduler.schedule(0 milliseconds, 15 seconds, self, Subscribe)
-  context.system.scheduler.schedule(0 milliseconds, 5 seconds, self, WriteResults)
+  context.system.scheduler.scheduleOnce(15 seconds, self, Subscribe)
 
   //val messageTypes: List[String] = List("SUBSCRIBE", "PUBLISH", "UNSUBSCRIBE")
   val topics: List[String] = List("Health Care", "Consumer Services", "Energy", "Finance", "Basic Industries",
@@ -116,6 +114,7 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
   }
   
   def initSubscriptions: Unit = {
+    log.info("Nodes created. Sending subscriptions...")
     for ((id,node) <- nodesAlive) {
       for (i<-1 to 5) {
         val topic = getRandomTopic
@@ -123,7 +122,7 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
         addEventToLog(id,-1,"SUBSCRIBE",topic,-1,"")
       }
     }
-    timeToWaitToPublish = System.currentTimeMillis()
+    context.system.scheduler.schedule(0 milliseconds, 5 seconds, self, WriteResults)
     publishTopicsTask = context.system.scheduler.schedule(0 milliseconds, 2 seconds, self, Publish)
   }
   
@@ -137,13 +136,17 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
   }
   
   def writeResultsToFile : Unit = {
-    val pw = new PrintWriter(new File("results.txt" ))
+    log.info("Writing results...")
+    
+    val fw = new FileWriter("results.txt", true)
     var it = logOfEvents.iterator()
-    while(it.hasNext()) {
-      pw.write(it.next()+"\n")
-      it.remove()
-    }
-    pw.close
+    try {
+      while(it.hasNext()) {
+        fw.write(it.next()+"\n")
+        it.remove()
+      }
+    } finally fw.close()
+
   }
     
 
@@ -162,20 +165,25 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
     
     case Publish => 
       if (currentNrRequests <= numRequests) {
-        if (timeToWaitToPublish + 10000 <= System.currentTimeMillis()) { // wait 10secs before starting publishing
+        log.info("Publishing...")
           val node = getRandomNode
           val topic = getRandomTopic
           val msg = getRandomMessage
           node.ref ! sendMessage(topic, "PUBLISH", msg)
           addEventToLog(node.id,-1,"PUBLISH",topic,-1,msg)
           currentNrRequests += 1
+      } else {
+        publishTopicsTask.cancel()
+        log.info("Stopped publishing...")
         }
-      } else publishTopicsTask.cancel()
       
     case Subscribe => initSubscriptions
     
     case registerEvent(from, to, msgType, topic, topicId, msg) =>
       addEventToLog(from,to,msgType,topic,topicId,msg)
+     
+    case registerDelivery(id, message) =>
+      logOfEvents.add("<"+id+","+message+">")
       
     case WriteResults => writeResultsToFile
       
