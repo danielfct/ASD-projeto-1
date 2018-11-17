@@ -9,6 +9,10 @@ import java.util.LinkedList
 import java.io.FileWriter
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentMap
+import java.util.HashMap
+import java.util.Map
+import java.util.Set
+import java.util.HashSet
 
 object ChordTester {
   final case object Subscribe
@@ -32,6 +36,8 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
   //var logOfEvents = new LinkedList[String]
   
   var stats = new ConcurrentHashMap[String, ConcurrentMap[Int,Int]]
+  var topicSubscribedBy = new HashMap[String, Set[Int]]
+  var currentNrPublishes: Int = 0
 
   // nó inicial
   var id: Int = r.nextInt(numMaxNodes)
@@ -129,6 +135,11 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
         var map = new ConcurrentHashMap[Int,Int];
         map.put(id,-1)
         stats.put(topic, map)
+        if (!topicSubscribedBy.containsKey(topic)) {
+          topicSubscribedBy.put(topic, new HashSet[Int])
+        }
+          var s = topicSubscribedBy.get(topic)
+          s.add(id)
         //addEventToLog(id,-1,"SUBSCRIBE",topic,-1,"")
       }
     }
@@ -182,6 +193,8 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
           node.ref ! sendMessage(topic, "PUBLISH", msg)
           //addEventToLog(node.id,-1,"PUBLISH",topic,-1,msg)
           currentNrRequests += 1
+          if (topicSubscribedBy.containsKey(topic))
+            currentNrPublishes += topicSubscribedBy.get(topic).size()
       } else {
         publishTopicsTask.cancel()
         context.system.scheduler.scheduleOnce(15 seconds, self, ShowStats)
@@ -232,8 +245,9 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
       })
       
       log.info("Num subscriptions requests: {}", numSubscriptions)
-      log.info("Num successful subscriptions: {} ({}%)", numSuccessfulSubscriptions, (numSuccessfulSubscriptions / numSubscriptions) * 100)
-      log.info("Num publishes deliveries: {}", numPublishesDeliveries)
+      log.info("Num successfull subscriptions: {} ({}%)", numSuccessfulSubscriptions, (numSuccessfulSubscriptions / numSubscriptions) * 100)
+      log.info("Num publishes requests: {}", currentNrPublishes)
+      log.info("Num successfull publishes deliveries: {} ({}%)", numPublishesDeliveries, (numPublishesDeliveries / currentNrPublishes) * 100)
       
   }
 
