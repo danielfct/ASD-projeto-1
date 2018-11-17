@@ -5,14 +5,30 @@ import scala.collection.mutable
 import scala.util.Random
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
+import java.io.PrintWriter
+import java.io.File
+import java.util.LinkedList
+
+object ChordTester {
+  final case object Subscribe
+  final case object Publish
+  final case object WriteResults
+}
+
+class Node(var id: Int, var ref: ActorRef)
 
 class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Float) extends Actor with ActorLogging {
+  import ChordTester._
+  
   val actorSystem = ActorSystem("PublishSubscribeChord")
   val r = new Random
   var currentNrMessages: Int = 0
   var currentNrFailedNodes: Int = 0
+  var currentNrRequests : Int = 0
   val nodesAlive: mutable.HashMap[Int, ActorRef] = new mutable.HashMap[Int, ActorRef]()
   val ids: mutable.HashMap[ActorRef, Int] = new mutable.HashMap[ActorRef, Int]()
+  var timeToWaitToPublish : Long = 0
+  var logOfEvents = new LinkedList[String]
 
   // nó inicial
   var id: Int = r.nextInt(numMaxNodes)
@@ -33,20 +49,23 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
     nodesAlive += (id -> chordNode)
     ids += (chordNode -> id)
   }
+  
+  context.system.scheduler.schedule(0 milliseconds, 15 seconds, self, Subscribe)
+  context.system.scheduler.schedule(0 milliseconds, 5 seconds, self, WriteResults)
 
-  val messageTypes: List[String] = List("SUBSCRIBE", "PUBLISH", "UNSUBSCRIBE")
+  //val messageTypes: List[String] = List("SUBSCRIBE", "PUBLISH", "UNSUBSCRIBE")
   val topics: List[String] = List("Health Care", "Consumer Services", "Energy", "Finance", "Basic Industries",
     "Technology", "Transportation", "Miscellaneous", "Capital Goods", "Public Utilities", "Consumer Durables",
-    "Electric Utilities: Central", "Industrial Machinery/Components", "Oil & Gas Production", "Power Generation",
+    "Electric Utilities: Central", "Industrial Machinery", "Gas Production", "Power Generation",
     "Savings Institutions", "Restaurants", "Food Chains", "Natural Gas Distribution", "Packaged Foods",
     "Biotechnology: Biological Products", "Metal Fabrications", "Computer Software: Prepackaged Software",
-    "Investment Bankers/Brokers/Service", "RETAIL: Building Materials", "Real Estate Investment Trusts", "Major Banks",
+    "Investment Bankers", "Building Materials", "Real Estate Investment Trusts", "Major Banks",
     "Major Pharmaceuticals", "Advertising", "Semiconductors", "Biotechnology: Laboratory Analytical Instruments",
     "Telecommunications Equipment", "Television Services", "Other Specialty Stores", "Specialty Insurers",
-    "Consumer Specialties", "Electronic Components", "Home Furnishings", "Package Goods/Cosmetics", "Commercial Banks",
-    "Environmental Services", "Auto Parts:O.E.M.", "EDP Services", "Miscellaneous manufacturing industries",
-    "Hotels/Resorts", "Ophthalmic Goods", "Business Services", "Precious Metals", "Consumer Electronics/Appliances",
-    "Major Chemicals", "Oil Refining/Marketing", "Marine Transportation", "Hospital/Nursing Management")
+    "Consumer Specialties", "Electronic Components", "Home Furnishings", "Package Goods", "Commercial Banks",
+    "Environmental Services", "Auto Parts", "EDP Services", "Miscellaneous manufacturing industries",
+    "Hotels", "Ophthalmic Goods", "Business Services", "Precious Metals", "Consumer Electronics",
+    "Major Chemicals", "Oil Refining", "Marine Transportation", "Hospital")
   val messages: List[String] = List(
     "in purus eu magna vulputate luctus cum sociis natoque penatibus et magnis dis parturient",
     "semper sapien a libero nam dui proin leo odio porttitor id consequat in consequat ut nulla sed accumsan",
@@ -57,10 +76,12 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
 
   var nodeFailureTask: Cancellable = _
   if (nodeFailurePercentage > 0.0) {
-    nodeFailureTask = context.system.scheduler.schedule(0 milliseconds, 50 milliseconds, getRandomNode, NodeFailure)
+    nodeFailureTask = context.system.scheduler.schedule(0 milliseconds, 50 milliseconds, getRandomNode.ref, NodeFailure)
   }
 
-  for (_ <- 0 until numRequests) {
+  var publishTopicsTask: Cancellable = _
+  
+  /*for (_ <- 0 until numRequests) {
     val randomNode: ActorRef = getRandomNode
     val randomTopic: String = getRandomTopic
     val randomMessageType: String = getRandomMessageType
@@ -69,12 +90,12 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
       randomMessage = getRandomMessage
     }
     randomNode ! sendMessage(randomTopic, randomMessageType, randomMessage)
-  }
+  }*/
 
-  def getRandomMessageType: String = {
+  /*def getRandomMessageType: String = {
     val index = r.nextInt(messageTypes.size)
     messageTypes(index)
-  }
+  }*/
 
   def getRandomMessage: String = {
     val index = r.nextInt(messages.size)
@@ -86,13 +107,45 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
     topics(index)
   }
 
-  def getRandomNode: ActorRef = {
+  def getRandomNode: Node = {
     var id = -1
     do {
       id = r.nextInt(numMaxNodes)
     } while (!nodesAlive.contains(id))
-    nodesAlive(id)
+    return new Node(id,nodesAlive(id))
   }
+  
+  def initSubscriptions: Unit = {
+    for ((id,node) <- nodesAlive) {
+      for (i<-1 to 5) {
+        val topic = getRandomTopic
+        node ! sendMessage(topic, "SUBSCRIBE", "")
+        addEventToLog(id,-1,"SUBSCRIBE",topic,-1,"")
+      }
+    }
+    timeToWaitToPublish = System.currentTimeMillis()
+    publishTopicsTask = context.system.scheduler.schedule(0 milliseconds, 2 seconds, self, Publish)
+  }
+  
+  def addEventToLog(from: Int, to: Int, msgType: String, topic: String, topicId: Int, msg: String) : Unit = {
+    var event: String = "";
+    if (topicId != -1 && to != -1)
+      event = "<" + from + "," + to + "," + msgType + "," + topic + "," + topicId + "," + msg + ">";
+    else
+     event = "<" + from + "," + msgType + "," + topic + "," + msg + ">"
+    logOfEvents.add(event)
+  }
+  
+  def writeResultsToFile : Unit = {
+    val pw = new PrintWriter(new File("results.txt" ))
+    var it = logOfEvents.iterator()
+    while(it.hasNext()) {
+      pw.write(it.next()+"\n")
+      it.remove()
+    }
+    pw.close
+  }
+    
 
   override def receive: Receive = {
     case Terminated(actor: ActorRef) => {
@@ -104,7 +157,28 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
         nodeFailureTask.cancel()
       }
     }
+    
     case CountMessage => currentNrMessages += 1
+    
+    case Publish => 
+      if (currentNrRequests <= numRequests) {
+        if (timeToWaitToPublish + 10000 <= System.currentTimeMillis()) { // wait 10secs before starting publishing
+          val node = getRandomNode
+          val topic = getRandomTopic
+          val msg = getRandomMessage
+          node.ref ! sendMessage(topic, "PUBLISH", msg)
+          addEventToLog(node.id,-1,"PUBLISH",topic,-1,msg)
+          currentNrRequests += 1
+        }
+      } else publishTopicsTask.cancel()
+      
+    case Subscribe => initSubscriptions
+    
+    case registerEvent(from, to, msgType, topic, topicId, msg) =>
+      addEventToLog(from,to,msgType,topic,topicId,msg)
+      
+    case WriteResults => writeResultsToFile
+      
   }
 
   println("Current number or failed nodes: " + currentNrFailedNodes + " (" + (currentNrFailedNodes/numMaxNodes).toDouble + "%)")

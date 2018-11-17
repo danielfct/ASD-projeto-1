@@ -26,7 +26,7 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
   var topicsWithSubscriptions = new HashMap[String, Map[Integer, ActorRef]]
   var subscriptionsAlreadySent = new LinkedList[Message]
   var subscriptionsTTL = new HashMap[String, Map[Integer, Long]]
-  val TTL = 15000 // TODO: find a good duration
+  val TTL = 15000
 
   def isInInterval(value: Int, start: Int, end: Int, includeStart: Boolean, includeEnd: Boolean): Boolean = {
     //log.info("{}: isInInterval value={}, start={}, end={}", selfKey, value, start, end);
@@ -72,7 +72,10 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
       val m = new Message(topic, msgType, msg, selfKey, self)
       if (msgType.equals("SUBSCRIBE"))
         subscriptionsAlreadySent.add(m)
-      self ! route(intSHA1Hash(topic), Some(m))
+      else if (msgType.equals("UNSUBSCRIBE"))
+        subscriptionsAlreadySent.remove(m)
+      self ! find_successor(intSHA1Hash(topic), self, Some(m))
+      //self ! route(intSHA1Hash(topic), Some(m))
 
     case route (id, message) =>
       if (id <= selfKey) {
@@ -89,6 +92,8 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
               }
               topicSubscribers.put(message.originalId, message.originalRef)
               topicSubscribersTTL.put(message.originalId, System.currentTimeMillis())
+              
+              tester ! registerEvent(message.originalId,selfKey,"SUBSCRIBE",message.topic,id,"")
             case "UNSUBSCRIBE" =>
               val topicSubscribers = topicsWithSubscriptions.get(message.topic)
               val topicSubscribersTTL = subscriptionsTTL.get(message.topic)
@@ -96,17 +101,21 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
                 topicSubscribers.remove(message.originalId)
                 topicSubscribersTTL.remove(message.originalId)
               }
+              
+              tester ! registerEvent(message.originalId,selfKey,"UNSUBSCRIBE",message.topic,id,"")
             case "PUBLISH" =>
               val subscribers: Map[Integer, ActorRef] = topicsWithSubscriptions.get(message.topic)
               if (subscribers != null) {
                 subscribers.values().forEach(sub => sub ! messageDelivery(message.msg))
               }
+              
+              tester ! registerEvent(message.originalId,selfKey,"PUBLISH",message.topic,id,message.msg)
           }
           case None => log.info("Warning: route got an empty message!");
         }
-      } else {
+      } /*else {
         self ! find_successor(id, self, message)
-      }
+      }*/
 
 
     case messageDelivery(message) =>

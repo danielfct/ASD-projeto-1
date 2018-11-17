@@ -1,4 +1,3 @@
-package concurrent
 
 import akka.actor.{ActorRef, ActorSystem}
 import java.util.Map
@@ -33,11 +32,11 @@ case class found_finger_successor(index: Int, id: Int, node: ActorRef)
 
 case class check_predecessor()
 
-case class heartBeat()
+case class keepAlive()
 
-case class areYouAlive()
+case class keepAliveSignal()
 
-case class yesIAm()
+case class keepAliveReply()
 
 case class debug()
 
@@ -55,4 +54,6 @@ class Message(var topic: String, var msgType: String, var msg: String, var origi
 
 final case object CountMessage
 
-final case object PoisonPill
+final case object NodeFailure
+
+case class registerEvent(from: Int, to: Int, msgType: String, topic: String, topicId: Int, message: String)
