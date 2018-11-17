@@ -106,7 +106,7 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
             case "PUBLISH" =>
               val subscribers: Map[Integer, ActorRef] = topicsWithSubscriptions.get(message.topic)
               if (subscribers != null) {
-                subscribers.values().forEach(sub => sub ! messageDelivery(message.msg))
+                subscribers.values().forEach(sub => sub ! messageDelivery(message.topic, message.msg))
               }
               
               tester ! registerEvent(message.originalId,selfKey,"PUBLISH",message.topic,id,message.msg)
@@ -116,9 +116,9 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
       
 
 
-    case messageDelivery(message) =>
+    case messageDelivery(topic, message) =>
       log.info("{} got message = {}", selfKey, message)
-      tester ! registerDelivery(selfKey, message)
+      tester ! registerDelivery(selfKey, topic, message)
 
     case find_successor(id, node, message) =>
       if (isInInterval(id, selfKey, fingersKeys(0), includeStart = false, includeEnd = true)) {
@@ -129,6 +129,7 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
         }
       }
       else {
+        tester ! CountMessage
         //log.info("find_successor on self node " + selfKey + " with id " + id + " result: continue")
         closest_preceding_finger(id) ! find_successor(id, node, message)
       }
@@ -165,6 +166,7 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
       predecessorRef = null
       predecessorKey = -1
       //log.info("initJoin on self node " + selfKey)
+      tester ! CountMessage
       contactNode ! join(selfKey, self)
 
     case join(id, node) =>
@@ -174,11 +176,13 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
     case stabilize() =>
       if (fingersRefs(0) != null) {
         //log.info("stabilize on self node " + selfKey)
+        tester ! CountMessage
         fingersRefs(0) ! stabilizeAskSuccessorPredecessor()
       }
 
     case stabilizeAskSuccessorPredecessor() =>
       //log.info("stabilizeAskSuccessorPredecessor on self node " + selfKey)
+      tester ! CountMessage
       sender() ! stabilizeSendSuccessorPredecessor(predecessorKey, predecessorRef)
 
     case stabilizeSendSuccessorPredecessor(id, node) =>
@@ -189,6 +193,7 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
       }
       if (fingersRefs(0) != self) {
         //log.info("start notification on self node " + selfKey)
+        tester ! CountMessage
         fingersRefs(0) ! notification(selfKey, self)
       }
 
@@ -216,6 +221,7 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
         //log.info("find_finger_successor on self node " + selfKey + " found for index " + index + " and id: continue")
         closest_preceding_finger(id) ! find_finger_successor(index, id, node)
       }
+      tester ! CountMessage
 
     case found_finger_successor(index, id, node) =>
       fingersRefs(index) = node
@@ -233,11 +239,13 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
       if (predecessorKey > 0) {
         //log.info("heartBeat on self node " + selfKey)
         predecessorRef ! keepAliveSignal()
+        tester ! CountMessage
       }
 
     case keepAliveSignal() =>
       //log.info("areYouAlive on self node " + selfKey)
       sender() ! keepAliveReply()
+      tester ! CountMessage
 
     case keepAliveReply() =>
       predecessorTTL = System.currentTimeMillis() + TTL

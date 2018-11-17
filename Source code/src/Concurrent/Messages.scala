@@ -44,7 +44,7 @@ case class sendMessage(topic: String, msgType: String, msg: String)
 
 case class deliver(id: Int, message: Option[Message])
 
-case class messageDelivery(message: String)
+case class messageDelivery(topic: String, message: String)
 
 case class refreshMySubscriptions()
 
@@ -58,4 +58,4 @@ final case object NodeFailure
 
 case class registerEvent(from: Int, to: Int, msgType: String, topic: String, topicId: Int, message: String)
 
-case class registerDelivery(id: Int, message: String)
+case class registerDelivery(id: Int, topic: String, message: String)

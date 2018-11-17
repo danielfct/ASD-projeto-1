@@ -7,11 +7,14 @@ import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 import java.util.LinkedList
 import java.io.FileWriter
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentMap
 
 object ChordTester {
   final case object Subscribe
   final case object Publish
   final case object WriteResults
+  final case object ShowStats
 }
 
 class Node(var id: Int, var ref: ActorRef)
@@ -26,7 +29,9 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
   var currentNrRequests : Int = 0
   val nodesAlive: mutable.HashMap[Int, ActorRef] = new mutable.HashMap[Int, ActorRef]()
   val ids: mutable.HashMap[ActorRef, Int] = new mutable.HashMap[ActorRef, Int]()
-  var logOfEvents = new LinkedList[String]
+  //var logOfEvents = new LinkedList[String]
+  
+  var stats = new ConcurrentHashMap[String, ConcurrentMap[Int,Int]]
 
   // nó inicial
   var id: Int = r.nextInt(numMaxNodes)
@@ -121,23 +126,26 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
       for (i<-1 to 5) {
         val topic = getRandomTopic
         node ! sendMessage(topic, "SUBSCRIBE", "")
-        addEventToLog(id,-1,"SUBSCRIBE",topic,-1,"")
+        var map = new ConcurrentHashMap[Int,Int];
+        map.put(id,-1)
+        stats.put(topic, map)
+        //addEventToLog(id,-1,"SUBSCRIBE",topic,-1,"")
       }
     }
-    context.system.scheduler.schedule(0 milliseconds, 5 seconds, self, WriteResults)
+    //context.system.scheduler.schedule(0 milliseconds, 5 seconds, self, WriteResults)
     publishTopicsTask = context.system.scheduler.schedule(0 milliseconds, 2 seconds, self, Publish)
   }
   
-  def addEventToLog(from: Int, to: Int, msgType: String, topic: String, topicId: Int, msg: String) : Unit = {
+  /*def addEventToLog(from: Int, to: Int, msgType: String, topic: String, topicId: Int, msg: String) : Unit = {
     var event: String = "";
     if (topicId != -1 && to != -1)
       event = "<" + from + "," + to + "," + msgType + "," + topic + "," + topicId + "," + msg + ">";
     else
      event = "<" + from + "," + msgType + "," + topic + "," + msg + ">"
     logOfEvents.add(event)
-  }
+  }*/
   
-  def writeResultsToFile : Unit = {
+ /* def writeResultsToFile : Unit = {
     log.info("Writing results...")
     
     val fw = new FileWriter("results.txt", true)
@@ -149,7 +157,7 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
       }
     } finally fw.close()
 
-  }
+  }*/
     
 
   override def receive: Receive = {
@@ -172,26 +180,64 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
           val topic = getRandomTopic
           val msg = getRandomMessage
           node.ref ! sendMessage(topic, "PUBLISH", msg)
-          addEventToLog(node.id,-1,"PUBLISH",topic,-1,msg)
+          //addEventToLog(node.id,-1,"PUBLISH",topic,-1,msg)
           currentNrRequests += 1
       } else {
         publishTopicsTask.cancel()
+        context.system.scheduler.scheduleOnce(15 seconds, self, ShowStats)
         log.info("Stopped publishing...")
-        }
+      }
       
     case Subscribe => initSubscriptions
     
     case registerEvent(from, to, msgType, topic, topicId, msg) =>
-      addEventToLog(from,to,msgType,topic,topicId,msg)
+      //addEventToLog(from,to,msgType,topic,topicId,msg)
+      if (msgType.equals("SUBSCRIBE")) {
+        var map = stats.get(topic)
+        map.put(from,0)
+        stats.put(topic, map)
+      }
      
-    case registerDelivery(id, message) =>
-      logOfEvents.add("<"+id+","+message+">")
+    case registerDelivery(id, topic, message) =>
+      //logOfEvents.add("<"+id+","+message+">")
+      var map = stats.get(topic)
+      if (map != null) {
+        var mapValue = map.get(id)
+        if (mapValue >= 0) {
+          map.put(id, mapValue+1)
+          stats.put(topic, map)
+        } else log.info("WARNING: GOT MESSAGE AND WASN'T EXPECTING FOR IT....")
+      }
       
-    case WriteResults => writeResultsToFile
+    //case WriteResults => writeResultsToFile
+    
+    case ShowStats =>
+      log.info("Num messages exchanged: {}", currentNrMessages);
+      log.info("Num failed nodes: {}", currentNrFailedNodes);
+      log.info("Ring sizes: {}", numMaxNodes)
+      log.info("Num publishes requests: {}", currentNrRequests)
+      var numSubscriptions = 0
+      var numSuccessfulSubscriptions = 0
+      var numPublishesDeliveries = 0
+      
+      stats.values().forEach(m => {
+        m.values().forEach(seq => {
+          if (seq >= -1)
+            numSubscriptions += 1
+          if (seq >= 0)
+            numSuccessfulSubscriptions +=1
+          if (seq > 0)
+            numPublishesDeliveries += seq
+        })
+      })
+      
+      log.info("Num subscriptions requests: {}", numSubscriptions)
+      log.info("Num successful subscriptions: {} ({}%)", numSuccessfulSubscriptions, (numSuccessfulSubscriptions / numSubscriptions) * 100)
+      log.info("Num publishes deliveries: {}", numPublishesDeliveries)
       
   }
 
-  println("Current number or failed nodes: " + currentNrFailedNodes + " (" + (currentNrFailedNodes/numMaxNodes).toDouble + "%)")
-  println("Total number of messages: " + currentNrMessages + " (" + (currentNrMessages/numRequests).toDouble + "%)")
+  /*println("Current number or failed nodes: " + currentNrFailedNodes + " (" + (currentNrFailedNodes/numMaxNodes).toDouble + "%)")
+  println("Total number of messages: " + currentNrMessages + " (" + (currentNrMessages/numRequests).toDouble + "%)")*/
 
 }
