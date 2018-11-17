@@ -77,8 +77,7 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
       self ! find_successor(intSHA1Hash(topic), self, Some(m))
       //self ! route(intSHA1Hash(topic), Some(m))
 
-    case route (id, message) =>
-      if (id <= selfKey) {
+    case deliver(id, message) =>
         message match {
           case Some(message) => message.msgType match {
             case "SUBSCRIBE" =>
@@ -90,10 +89,11 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
                 subscriptionsTTL.put(message.topic, new HashMap[Integer, Long]())
                 topicSubscribersTTL = subscriptionsTTL.get(message.topic)
               }
+              var isRefresh = topicSubscribers.containsKey(message.originalId)
               topicSubscribers.put(message.originalId, message.originalRef)
               topicSubscribersTTL.put(message.originalId, System.currentTimeMillis())
               
-              tester ! registerEvent(message.originalId,selfKey,"SUBSCRIBE",message.topic,id,"")
+              if (!isRefresh) tester ! registerEvent(message.originalId,selfKey,"SUBSCRIBE",message.topic,id,"")
             case "UNSUBSCRIBE" =>
               val topicSubscribers = topicsWithSubscriptions.get(message.topic)
               val topicSubscribersTTL = subscriptionsTTL.get(message.topic)
@@ -113,9 +113,7 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
           }
           case None => log.info("Warning: route got an empty message!");
         }
-      } /*else {
-        self ! find_successor(id, self, message)
-      }*/
+      
 
 
     case messageDelivery(message) =>
@@ -127,7 +125,7 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
         //log.info("find_successor on self node " + selfKey + " with id " + id + " result: " + fingersKeys(0))
         message match {
           case None => node ! found_successor(fingersKeys(0), fingersRefs(0))
-          case message => fingersRefs(0) ! route(id, message)
+          case message => fingersRefs(0) ! deliver(id, message)
         }
       }
       else {
@@ -247,7 +245,7 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
     //log.info("yesIAm on self node " + selfKey + " gets new ttl: " + predecessorTTL)
 
     case refreshMySubscriptions() =>
-      subscriptionsAlreadySent.forEach(subscription => self ! route(intSHA1Hash(subscription.topic), Some(subscription)))
+      subscriptionsAlreadySent.forEach(subscription => self ! find_successor(intSHA1Hash(subscription.topic), self, Some(subscription)))
 
     case checkMyTopicsSubscribersTTL() =>
       subscriptionsTTL.keySet().forEach(topic => {

@@ -49,16 +49,18 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
     ids += (chordNode -> id)
   }
   
+  log.info("nodes: " + nodesAlive.keySet.toString())
+  
   context.system.scheduler.scheduleOnce(15 seconds, self, Subscribe)
 
   //val messageTypes: List[String] = List("SUBSCRIBE", "PUBLISH", "UNSUBSCRIBE")
   val topics: List[String] = List("Health Care", "Consumer Services", "Energy", "Finance", "Basic Industries",
     "Technology", "Transportation", "Miscellaneous", "Capital Goods", "Public Utilities", "Consumer Durables",
-    "Electric Utilities: Central", "Industrial Machinery", "Gas Production", "Power Generation",
+    "Electric Utilities", "Industrial Machinery", "Gas Production", "Power Generation",
     "Savings Institutions", "Restaurants", "Food Chains", "Natural Gas Distribution", "Packaged Foods",
-    "Biotechnology: Biological Products", "Metal Fabrications", "Computer Software: Prepackaged Software",
+    "Biotechnology", "Metal Fabrications", "Computer Software",
     "Investment Bankers", "Building Materials", "Real Estate Investment Trusts", "Major Banks",
-    "Major Pharmaceuticals", "Advertising", "Semiconductors", "Biotechnology: Laboratory Analytical Instruments",
+    "Major Pharmaceuticals", "Advertising", "Semiconductors", "Laboratory Instruments",
     "Telecommunications Equipment", "Television Services", "Other Specialty Stores", "Specialty Insurers",
     "Consumer Specialties", "Electronic Components", "Home Furnishings", "Package Goods", "Commercial Banks",
     "Environmental Services", "Auto Parts", "EDP Services", "Miscellaneous manufacturing industries",

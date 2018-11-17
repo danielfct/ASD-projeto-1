@@ -42,7 +42,7 @@ case class debug()
 
 case class sendMessage(topic: String, msgType: String, msg: String)
 
-case class route(id: Int, message: Option[Message])
+case class deliver(id: Int, message: Option[Message])
 
 case class messageDelivery(message: String)
 
