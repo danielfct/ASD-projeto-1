@@ -7,7 +7,7 @@
 \usepackage{graphicx}
 \usepackage{booktabs}
 \graphicspath{ {images/} }
-\usepackage[portuguese]{babel} % Mul­tilin­gual sup­port for Plain TEX or LaTeX.
+\usepackage[portuguese]{babel}
 
 \begin{document}
 \begin{titlepage}
@@ -80,44 +80,99 @@
 \listoftables
 
 \newpage
-\section{Resumo}
-
-TO DO...
-
-\newpage
 \section{Introdução}
 
-Com o aparecimento e evolução da Internet existiu uma enorme evolução dos modelos de comunicação utilizados pelos sistemas de computadores. Estes modelos podem ser divididos em dois grandes grupos, os modelos de sistemas centralizados em que na sua variação mais simples, os clientes comunicam com um servidor que satisfaz todos os seus pedidos, e os modelos de sistemas distribuídos em que o sistema é feito de nós que representam vários pontos de uma rede onde existem nós que são clientes e outros que são servidores (por vezes os clientes podem também ser servidores). Os nós servidores podem ser replicas perfeitas uns dos outros ou apenas fazerem uma replicação parcial das operações fornecidas. Desta forma não existe um único ponto de falha e existe uma divisão do trabalho pelos vários nós do sistema. Os sistemas distribuídos são bastante complexos e têm várias propriedades. A realização deste trabalho tem como base a implementação de um sistema distribuído estruturado, ou seja, os nós da rede estão organizados segundo uma determinada ordem, sendo a ordem mais comum representada por uma forma em anel.
+No âmbito da cadeira de Algoritmos e Sistemas Distribuídos foi-nos lançado o desafio de implementar um sistema de \emph{Publish-Subscribe} em cima de uma \emph{distributed hash table} (DHT). Uma DHT é um modelo de rede estruturada com capacidade para guardar dados de forma distribuída em cada nó da mesma.
+
+Com a implementação deste sistema podemos estudar a complexidade desta classe de algoritmos, aprender a realizar testes sobre uma rede deste tipo e aprender a identificar as propriedades do sistema.
 
 \newpage
-\section{Objetivos}
+\section{Visão global}
 
-O objetivo deste estudo é a implementação de um sistema de subscrição montado em cima de um sistema distribuído estruturado conhecido por tabela de dispersão distribuída (DHT). Com a programação deste sistema, temos a oportunidade de estudar os pormenores da sua implementação e de aprender a realizar testes de desempenho e de fiabilidade a um sistema destes.
+Este sistema pode ser decomposto em 3 camadas. A primeira é a camada que dá suporte ao sistema. Esta no nosso caso corresponde a implementação do algoritmo Chord \cite{b2}. A segunda é a camada relacionada com o sistema de \emph{Publish-Subscribe}. Esta é responsável pela criação e subscrição dos respetivos tópicos de interesse a cada individuo na rede. Com estas subscrições será possível a troca de mensagens dentro de cada tópico. Por ultimo é a camada de teste. Esta é responsável pela recolha e processamento dos dados de teste para futura análise. 
+
+As primeiras duas camadas foram implementadas tendo como guia os materiais da cadeira e ASD \cite{b1}.
+
+A implementação deste sistema foi feita com a linguagem computacional de Scala \cite{b3} e utilizando o conjunto de ferramentas do Akka \cite{b4}. 
 
 \newpage
-\section{Implementação}
+\section{Visão global detalhada}
 
-A implementação desta DHT tem como base o algoritmo de Chord tal como visto no artigo \cite{b2} e o sistema de subscrição tem como base o os materiais da cadeira \cite{b1}. A programação deste sistema foi feita com a linguagem computacional de Scala \cite{b3} e utilizando o conjunto de ferramentas do Akka \cite{b4}.
+Nesta secção iremos explicar textualmente ao pormenor os detalhes de cada uma das camadas anteriormente mencionadas.
 
 \newpage
-\section{Testes}
+\subsection{Chord}
 
-Os testes ao sistema têm como objetivo a analise do desempenho e da fiabilidade do mesmo. Para isso serão recolhidos dados lançando 100, 1000 e 10000 nós.
+O Chord quando arranca o primeiro nó inicializa o predecessor a nulo e o sucessor como ele mesmo. No caso de não ser o primeiro, inicializa o predecessor a nulo e o sucessor com o resultado da função de encontrar o sucessor.
 
-\subsection{Teste dos 100 nós}
+A função de encontrar o sucessor funciona tendo um nó n que procura um nó n'.
+
+As restantes funções do algoritmo têm como objectivo manter o sistema num estado estavel e correcto. Estas são chamadas regularmente do inicio ao fim da execução.
+
+A função de estabilização verifica se o nó contem o sucessor correcto e notifica o sucessor sobre quem é o seu predecessor.
+
+É importante verificar se os \emph{fingers} estão a apontar para os valores correctos. Para isso temos a função de arranjar os \emph{fingers}. Esta função a cada execução verifica um finger diferente para puder analisar gradualmente todos os fingers.
+
+Por ultimo temos a função de verificar o predecessor que confirma se o predecessor é um nó activo.
+
+\newpage
+\subsection{Publish-Subscribe}
+
+O Publish-Subscribe tem como função permitir os clientes fazerem a subcrição em determinados topicos e submeterem mensagens nos mesmos.
+
+Cada nó de cliente por subscrição submete uma mensagem utilizando o comando \emph{route}.
+
+Regularmente os clientes verificam se os topicos ainda estão ativos, caso nao estejam, então é criados o novo topico.
+
+Os nós de subscrição verificando os interessados em cada topico e caso nao existam o topico é apagado.
+
+\newpage
+\subsection{Aplicação de teste}
 
 TO DO...
 
-\subsection{Teste dos 1000 nós}
-
-TO DO...
-
-\subsection{Teste dos 10000 nós}
+\newpage
+\section{Pseudo-código e arquitetura}
 
 TO DO...
 
 \newpage
-\section{Conclusões}
+\subsection{Chord}
+
+O pseudo-código do Chord segue rigorosamente o algoritmo apresentado pelo professor nos slides da cadeira de ASD \cite{b1}.
+
+\begin{figure}[htbp]
+	\centering
+	\includegraphics[height=0.96\textwidth]{pseudoChord.png}
+	\caption{Pseudo-código do algoritmo Chord.}
+	\label{fig:chord}
+\end{figure}
+
+\newpage
+\subsection{Publish-Subscribe}
+
+TO DO...
+
+\newpage
+\subsection{Aplicação de teste}
+
+TO DO...
+
+\newpage
+\section{Avaliação dos resultados}
+
+TO DO...
+
+\subsection{Experiências}
+
+TO DO...
+
+\subsection{Resultados com observações}
+
+TO DO...
+
+\newpage
+\section{Conclusão}
 
 TO DO...
 
