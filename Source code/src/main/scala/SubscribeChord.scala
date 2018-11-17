@@ -117,7 +117,7 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
 
 
     case messageDelivery(topic, message) =>
-      log.info("{} got message = {}", selfKey, message)
+      //log.info("{} got message = {}", selfKey, message)
       tester ! registerDelivery(selfKey, topic, message)
 
     case find_successor(id, node, message) =>
@@ -152,12 +152,12 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
         fingersRefs(i) = self
         fingersKeys(i) = selfKey
       }
-      context.system.scheduler.schedule(0 milliseconds, 5 milliseconds, self, stabilize())
-      context.system.scheduler.schedule(0 milliseconds, 6 milliseconds, self, fix_fingers())
-      context.system.scheduler.schedule(0 milliseconds, 7 seconds, self, check_predecessor())
-      context.system.scheduler.schedule(0 milliseconds, 2 seconds, self, keepAlive())
-      context.system.scheduler.schedule(0 milliseconds, 5 seconds, self, refreshMySubscriptions())
-      context.system.scheduler.schedule(0 milliseconds, 15 seconds, self, checkMyTopicsSubscribersTTL())
+      context.system.scheduler.schedule(5 milliseconds, 5 milliseconds, self, stabilize())
+      context.system.scheduler.schedule(6 milliseconds, 6 milliseconds, self, fix_fingers())
+      context.system.scheduler.schedule(7 seconds, 7 seconds, self, check_predecessor())
+      context.system.scheduler.schedule(2 seconds, 2 seconds, self, keepAlive())
+      context.system.scheduler.schedule(5 seconds, 5 seconds, self, refreshMySubscriptions())
+      context.system.scheduler.schedule(15 seconds, 15 seconds, self, checkMyTopicsSubscribersTTL())
       //log.info("create self node: " + selfKey)
       if (contactNode != null && contactNode != self)
         self ! initJoin(contactNode)
@@ -176,13 +176,11 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
     case stabilize() =>
       if (fingersRefs(0) != null) {
         //log.info("stabilize on self node " + selfKey)
-        tester ! CountMessage
         fingersRefs(0) ! stabilizeAskSuccessorPredecessor()
       }
 
     case stabilizeAskSuccessorPredecessor() =>
       //log.info("stabilizeAskSuccessorPredecessor on self node " + selfKey)
-      tester ! CountMessage
       sender() ! stabilizeSendSuccessorPredecessor(predecessorKey, predecessorRef)
 
     case stabilizeSendSuccessorPredecessor(id, node) =>
@@ -191,14 +189,13 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
         fingersKeys(0) = id
         //log.info("stabilizeSendSuccessorPredecessor on self node " + selfKey + " finds successor: " + id)
       }
-      if (fingersRefs(0) != self) {
+      if (fingersRefs(0) != null && fingersRefs(0) != self) {
         //log.info("start notification on self node " + selfKey)
-        tester ! CountMessage
         fingersRefs(0) ! notification(selfKey, self)
       }
 
     case notification(id, node) =>
-      if (predecessorKey == -1 || isInInterval(id, predecessorKey, selfKey, includeStart = false, includeEnd = false)) {
+      if (id != -1 && node != null && (predecessorKey == -1 || isInInterval(id, predecessorKey, selfKey, includeStart = false, includeEnd = false))) {
         predecessorRef = node
         predecessorKey = id
         //log.info("notification on self node " + selfKey + " ok, my predecessor is: " + id)
@@ -221,7 +218,6 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
         //log.info("find_finger_successor on self node " + selfKey + " found for index " + index + " and id: continue")
         closest_preceding_finger(id) ! find_finger_successor(index, id, node)
       }
-      tester ! CountMessage
 
     case found_finger_successor(index, id, node) =>
       fingersRefs(index) = node
@@ -231,7 +227,7 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
     case check_predecessor() =>
       if (predecessorTTL < System.currentTimeMillis()) {
         predecessorRef = null
-        predecessorKey = -1
+        //predecessorKey = -1
         //log.info("check_predecessor on self node " + selfKey + " timeout")
       }
 
@@ -239,13 +235,11 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
       if (predecessorKey > 0) {
         //log.info("heartBeat on self node " + selfKey)
         predecessorRef ! keepAliveSignal()
-        tester ! CountMessage
       }
 
     case keepAliveSignal() =>
       //log.info("areYouAlive on self node " + selfKey)
       sender() ! keepAliveReply()
-      tester ! CountMessage
 
     case keepAliveReply() =>
       predecessorTTL = System.currentTimeMillis() + TTL

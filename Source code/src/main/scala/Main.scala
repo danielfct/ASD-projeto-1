@@ -12,7 +12,7 @@ object Main {
     val numberOfRequests: Int = math.max(10, args(1).toInt)
     val nodeFailurePercentage: Float = math.min(args(1).toFloat, 0.9f)
     */
-    val maxNrNodes: Int = 5
+    val maxNrNodes: Int = 1000
     val numberOfRequests: Int = 10
     val nodeFailurePercentage: Float = 0f
 
