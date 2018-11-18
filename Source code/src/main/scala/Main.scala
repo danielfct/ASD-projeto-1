@@ -1,11 +1,9 @@
-
-import Chord.Initializer
-import Chord.Initializer.CreateRing
 import akka.actor.{ActorSystem, Props}
 
 import scala.util.Random
 
 object Main {
+
   def main(args: Array[String]): Unit = {
     /*if (args.length != 3) {
       println("Usage: sbt run NumberOfNodes NumberOfRequests NodeFailurePercentage")
@@ -17,9 +15,10 @@ object Main {
     */
     val maxNrNodes: Int = 8
     val numberOfRequests: Int = 10
-    val nodeFailurePercentage: Float = 0f
+    val nodeFailurePercentage: Float = 0f //TODO para suportar falhas é preciso modificar o chord (successorList)
 
     val actorSystem = ActorSystem("PublishSubscribeChord")
     actorSystem.actorOf(Props(new ChordTester(maxNrNodes, numberOfRequests, nodeFailurePercentage)), "PublishSubscribeChordTester")
   }
+
 }

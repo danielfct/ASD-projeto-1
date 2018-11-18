@@ -1,4 +1,3 @@
-
 import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, Cancellable, Terminated}
 
 import scala.collection.mutable
@@ -14,15 +13,15 @@ import java.util.Map
 import java.util.Set
 import java.util.HashSet
 
+import SubscribeChord._
+
 object ChordTester {
-  final case object Debug
+  final case object DebugNodes
   final case object Subscribe
   final case object Publish
   final case object WriteResults
   final case object ShowStats
 }
-
-class Node(var id: Int, var ref: ActorRef)
 
 class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Float) extends Actor with ActorLogging {
   import ChordTester._
@@ -42,9 +41,9 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
 
   // nó inicial
   var id: Int = r.nextInt(numMaxNodes)
-  val actorInit: ActorRef = actorSystem.actorOf(SubscribeChord.props(self), "Initializer")
+  val actorInit: ActorRef = actorSystem.actorOf(SubscribeChord.props(numMaxNodes), "Initializer")
   context.watch(actorInit)
-  actorInit ! create(numMaxNodes, id, actorInit)
+  actorInit ! addNode(id, actorInit)
   nodesAlive += (id -> actorInit)
   ids += (actorInit -> id)
 
@@ -54,16 +53,16 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
     do {
       id = r.nextInt(numMaxNodes)
     } while (nodesAlive contains id)
-    val chordNode: ActorRef = actorSystem.actorOf(SubscribeChord.props(self), "Node" + id)
+    val chordNode: ActorRef = actorSystem.actorOf(SubscribeChord.props(numMaxNodes), "Node" + id)
     context.watch(chordNode)
-    chordNode ! create(numMaxNodes, id, actorInit)
+    chordNode ! addNode(id, actorInit)
     nodesAlive += (id -> chordNode)
     ids += (chordNode -> id)
   }
 
   log.info("Nodes: " + nodesAlive.keySet.toString())
 
-  context.system.scheduler.scheduleOnce(10 seconds, self, Debug)
+  context.system.scheduler.scheduleOnce(10 seconds, self, DebugNodes)
 
   context.system.scheduler.scheduleOnce(15 seconds, self, Subscribe)
 
@@ -121,12 +120,12 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
     topics(index)
   }
 
-  def getRandomNode: Node = {
+  def getRandomNode: ChordNode = {
     var id = -1
     do {
       id = r.nextInt(numMaxNodes)
     } while (!nodesAlive.contains(id))
-    return new Node(id,nodesAlive(id))
+    ChordNode(id,nodesAlive(id))
   }
   
   def initSubscriptions: Unit = {
@@ -185,9 +184,9 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
       }
     }
 
-    case Debug =>
+    case DebugNodes =>
       for ((_, node) <- nodesAlive) {
-        node ! debug()
+        node ! Debug
       }
 
     case CountMessage => currentNrMessages += 1
