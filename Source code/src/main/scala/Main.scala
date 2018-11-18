@@ -1,5 +1,8 @@
 
+import Chord.Initializer
+import Chord.Initializer.CreateRing
 import akka.actor.{ActorSystem, Props}
+
 import scala.util.Random
 
 object Main {
@@ -12,12 +15,11 @@ object Main {
     val numberOfRequests: Int = math.max(10, args(1).toInt)
     val nodeFailurePercentage: Float = math.min(args(1).toFloat, 0.9f)
     */
-    val maxNrNodes: Int = 1000
+    val maxNrNodes: Int = 8
     val numberOfRequests: Int = 10
     val nodeFailurePercentage: Float = 0f
 
     val actorSystem = ActorSystem("PublishSubscribeChord")
-
     actorSystem.actorOf(Props(new ChordTester(maxNrNodes, numberOfRequests, nodeFailurePercentage)), "PublishSubscribeChordTester")
   }
 }

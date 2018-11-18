@@ -15,6 +15,7 @@ import java.util.Set
 import java.util.HashSet
 
 object ChordTester {
+  final case object Debug
   final case object Subscribe
   final case object Publish
   final case object WriteResults
@@ -59,9 +60,11 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
     nodesAlive += (id -> chordNode)
     ids += (chordNode -> id)
   }
-  
-  log.info("nodes: " + nodesAlive.keySet.toString())
-  
+
+  log.info("Nodes: " + nodesAlive.keySet.toString())
+
+  context.system.scheduler.scheduleOnce(10 seconds, self, Debug)
+
   context.system.scheduler.scheduleOnce(15 seconds, self, Subscribe)
 
   //val messageTypes: List[String] = List("SUBSCRIBE", "PUBLISH", "UNSUBSCRIBE")
@@ -181,7 +184,12 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
         nodeFailureTask.cancel()
       }
     }
-    
+
+    case Debug =>
+      for ((_, node) <- nodesAlive) {
+        node ! debug()
+      }
+
     case CountMessage => currentNrMessages += 1
     
     case Publish => 

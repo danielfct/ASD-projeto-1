@@ -28,6 +28,8 @@ case class fix_fingers()
 
 case class find_finger_successor(index: Int, id: Int, node: ActorRef)
 
+case class send_finger_successor(index: Int, node: ActorRef)
+
 case class found_finger_successor(index: Int, id: Int, node: ActorRef)
 
 case class check_predecessor()

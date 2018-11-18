@@ -22,7 +22,7 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
   var predecessorTTL: Long = 0
   var fingersRefs = new Array[ActorRef](1)
   var fingersKeys = new Array[Int](1)
-  var next: Int = 0
+  var next: Int = 1
   var topicsWithSubscriptions = new HashMap[String, Map[Integer, ActorRef]]
   var subscriptionsAlreadySent = new LinkedList[Message]
   var subscriptionsTTL = new HashMap[String, Map[Integer, Long]]
@@ -113,8 +113,6 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
           }
           case None => log.info("Warning: route got an empty message!");
         }
-      
-
 
     case messageDelivery(topic, message) =>
       //log.info("{} got message = {}", selfKey, message)
@@ -148,7 +146,7 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
       fingersKeys = new Array[Int](m)
       predecessorRef = null
       predecessorKey = -1
-      for (i <- 0 until m - 1) {
+      for (i <- 0 until m) {
         fingersRefs(i) = self
         fingersKeys(i) = selfKey
       }
@@ -202,22 +200,27 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
       }
 
     case fix_fingers() =>
+      val fingerId: Int = ((selfKey + Math.pow(2, next)) % Math.pow(2, m)).toInt
+      self ! find_finger_successor(next, fingerId, self)
       next = next + 1
       //log.info("fix_fingers on self node " + selfKey + " with next value of: " + next)
       if (next > (m - 1)) {
-        next = 0
+        next = 1
       }
-      self ! find_finger_successor(next, selfKey + Math.pow(2, next).toInt, self)
 
     case find_finger_successor(index, id, node) =>
       if (isInInterval(id, selfKey, fingersKeys(0), includeStart = false, includeEnd = true)) {
         //log.info("find_finger_successor on self node " + selfKey + " found for index " + index + " and id: " + fingersKeys(0))
-        node ! found_finger_successor(index, fingersKeys(0), fingersRefs(0))
+        //node ! found_finger_successor(index, fingersKeys(0), fingersRefs(0))
+        fingersRefs(0) ! send_finger_successor(index, node)
       }
       else {
         //log.info("find_finger_successor on self node " + selfKey + " found for index " + index + " and id: continue")
         closest_preceding_finger(id) ! find_finger_successor(index, id, node)
       }
+
+    case send_finger_successor(index, node) =>
+      node ! found_finger_successor(index, fingersKeys(0), fingersRefs(0))
 
     case found_finger_successor(index, id, node) =>
       fingersRefs(index) = node
@@ -261,19 +264,16 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
             topicsWithSubscriptionsEntry.remove(subscriberId)
           }
         }
-/*        subscriptionsTTLEntry.keySet().forEach(subscriberId => {
-          if (System.currentTimeMillis() > subscriptionsTTLEntry.get(subscriberId) + TTL) {
-            subscriptionsTTLEntry.remove(subscriberId)
-            topicsWithSubscriptionsEntry.remove(subscriberId)
-          }
-        })*/
       })
 
     case NodeFailure =>
       context.stop(self)
 
     case debug() =>
-      log.info("m: " + m + " --- from node " + selfKey)
+      for (i <- 0 until m) {
+        println("Node %d: fingerTable[%d] = %d".format(selfKey, i, fingersKeys(i)))
+      }
+      /*log.info("m: " + m + " --- from node " + selfKey)
       log.info("ringSize: " + ringSize + " --- from node " + selfKey)
       log.info("selfKey: " + selfKey + " --- from node " + selfKey)
       log.info("predecessorKey: " + predecessorKey + " --- from node " + selfKey)
@@ -283,6 +283,6 @@ class SubscribeChord(tester: ActorRef) extends Actor with ActorLogging {
         log.info("finger " + i + ":" + fingersKeys(i) + " --- from node " + selfKey)
       }
       Thread.sleep(500)
-      fingersRefs(0) ! debug()
+      fingersRefs(0) ! debug()*/
   }
 }
