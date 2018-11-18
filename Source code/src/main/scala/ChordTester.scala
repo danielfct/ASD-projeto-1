@@ -1,70 +1,49 @@
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
+import java.util.{HashMap, HashSet, Set}
 
-import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, Cancellable, Terminated}
+import SubscribeChord._
+import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, Cancellable, PoisonPill, Terminated}
 
 import scala.collection.mutable
-import scala.util.Random
-import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
-import java.util.LinkedList
-import java.io.FileWriter
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.ConcurrentMap
-import java.util.HashMap
-import java.util.Map
-import java.util.Set
-import java.util.HashSet
+import scala.concurrent.duration._
+import scala.util.Random
 
 object ChordTester {
+
+  final case object CreateRing
+
   final case object Subscribe
+
   final case object Publish
-  final case object WriteResults
+
   final case object ShowStats
+
+  final case object DebugNodes
+
+  case class RegisterEvent(from: Int, to: Int, msgType: String, topic: String, topicId: Int, message: String)
+
+  case class RegisterDelivery(id: Int, topic: String, message: String)
+
 }
 
-class Node(var id: Int, var ref: ActorRef)
-
 class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Float) extends Actor with ActorLogging {
+
   import ChordTester._
-  
+
   val actorSystem = ActorSystem("PublishSubscribeChord")
   val r = new Random
   var currentNrMessages: Int = 0
   var currentNrFailedNodes: Int = 0
-  var currentNrRequests : Int = 0
+  var currentNrRequests: Int = 0
+  var currentNrHops: Int = 0
+  var currentNrPublishes: Int = 0
   val nodesAlive: mutable.HashMap[Int, ActorRef] = new mutable.HashMap[Int, ActorRef]()
   val ids: mutable.HashMap[ActorRef, Int] = new mutable.HashMap[ActorRef, Int]()
-  //var logOfEvents = new LinkedList[String]
-  
-  var stats = new ConcurrentHashMap[String, ConcurrentMap[Int,Int]]
+  var nodeFailureTask: Cancellable = _
+  var publishTopicsTask: Cancellable = _
   var topicSubscribedBy = new HashMap[String, Set[Int]]
-  var currentNrPublishes: Int = 0
-
-  // nó inicial
-  var id: Int = r.nextInt(numMaxNodes)
-  val actorInit: ActorRef = actorSystem.actorOf(SubscribeChord.props(self), "Initializer")
-  context.watch(actorInit)
-  actorInit ! create(numMaxNodes, id, actorInit)
-  nodesAlive += (id -> actorInit)
-  ids += (actorInit -> id)
-
-  log.info("Creating nodes...")
-  // criação dos nós
-  for (_ <- 0 until numMaxNodes-1) { //-1 para excluir o nó inicial
-    do {
-      id = r.nextInt(numMaxNodes)
-    } while (nodesAlive contains id)
-    val chordNode: ActorRef = actorSystem.actorOf(SubscribeChord.props(self), "Node" + id)
-    context.watch(chordNode)
-    chordNode ! create(numMaxNodes, id, actorInit)
-    nodesAlive += (id -> chordNode)
-    ids += (chordNode -> id)
-  }
-  
-  log.info("nodes: " + nodesAlive.keySet.toString())
-  
-  context.system.scheduler.scheduleOnce(15 seconds, self, Subscribe)
-
-  //val messageTypes: List[String] = List("SUBSCRIBE", "PUBLISH", "UNSUBSCRIBE")
+  var stats = new ConcurrentHashMap[String, ConcurrentMap[Int, Int]]
   val topics: List[String] = List("Health Care", "Consumer Services", "Energy", "Finance", "Basic Industries",
     "Technology", "Transportation", "Miscellaneous", "Capital Goods", "Public Utilities", "Consumer Durables",
     "Electric Utilities", "Industrial Machinery", "Gas Production", "Power Generation",
@@ -85,29 +64,6 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
     "amet sapien dignissim vestibulum vestibulum ante ipsum primis in faucibus orci",
     "sit amet sapien dignissim vestibulum vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere")
 
-  var nodeFailureTask: Cancellable = _
-  if (nodeFailurePercentage > 0.0) {
-    nodeFailureTask = context.system.scheduler.schedule(0 milliseconds, 50 milliseconds, getRandomNode.ref, NodeFailure)
-  }
-
-  var publishTopicsTask: Cancellable = _
-  
-  /*for (_ <- 0 until numRequests) {
-    val randomNode: ActorRef = getRandomNode
-    val randomTopic: String = getRandomTopic
-    val randomMessageType: String = getRandomMessageType
-    var randomMessage: String = ""
-    if (randomMessageType.equals("PUBLISH")) {
-      randomMessage = getRandomMessage
-    }
-    randomNode ! sendMessage(randomTopic, randomMessageType, randomMessage)
-  }*/
-
-  /*def getRandomMessageType: String = {
-    val index = r.nextInt(messageTypes.size)
-    messageTypes(index)
-  }*/
-
   def getRandomMessage: String = {
     val index = r.nextInt(messages.size)
     messages(index)
@@ -118,60 +74,113 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
     topics(index)
   }
 
-  def getRandomNode: Node = {
+  def getRandomNode: ChordNode = {
     var id = -1
     do {
       id = r.nextInt(numMaxNodes)
     } while (!nodesAlive.contains(id))
-    return new Node(id,nodesAlive(id))
+    ChordNode(id, nodesAlive(id))
   }
-  
-  def initSubscriptions: Unit = {
-    log.info("Nodes created. Sending subscriptions...")
-    for ((id,node) <- nodesAlive) {
-      for (i<-1 to 5) {
-        val topic = getRandomTopic
-        node ! sendMessage(topic, "SUBSCRIBE", "")
-        var map = new ConcurrentHashMap[Int,Int];
-        map.put(id,-1)
-        stats.put(topic, map)
-        if (!topicSubscribedBy.containsKey(topic)) {
-          topicSubscribedBy.put(topic, new HashSet[Int])
-        }
-          var s = topicSubscribedBy.get(topic)
-          s.add(id)
-        //addEventToLog(id,-1,"SUBSCRIBE",topic,-1,"")
-      }
-    }
-    //context.system.scheduler.schedule(0 milliseconds, 5 seconds, self, WriteResults)
-    publishTopicsTask = context.system.scheduler.schedule(0 milliseconds, 2 seconds, self, Publish)
-  }
-  
-  /*def addEventToLog(from: Int, to: Int, msgType: String, topic: String, topicId: Int, msg: String) : Unit = {
-    var event: String = "";
-    if (topicId != -1 && to != -1)
-      event = "<" + from + "," + to + "," + msgType + "," + topic + "," + topicId + "," + msg + ">";
-    else
-     event = "<" + from + "," + msgType + "," + topic + "," + msg + ">"
-    logOfEvents.add(event)
-  }*/
-  
- /* def writeResultsToFile : Unit = {
-    log.info("Writing results...")
-    
-    val fw = new FileWriter("results.txt", true)
-    var it = logOfEvents.iterator()
-    try {
-      while(it.hasNext()) {
-        fw.write(it.next()+"\n")
-        it.remove()
-      }
-    } finally fw.close()
-
-  }*/
-    
 
   override def receive: Receive = {
+
+    case CreateRing =>
+      log.info("Creating nodes...")
+      var id: Int = r.nextInt(numMaxNodes)
+      val masterNode: ActorRef = actorSystem.actorOf(SubscribeChord.props(numMaxNodes), "NodeMaster")
+      context.watch(masterNode)
+      masterNode ! AddNode(id, masterNode)
+      nodesAlive += (id -> masterNode)
+      ids += (masterNode -> id)
+      for (_ <- 0 until numMaxNodes - 1) {
+        do {
+          id = r.nextInt(numMaxNodes)
+        } while (nodesAlive contains id)
+        val chordNode: ActorRef = actorSystem.actorOf(SubscribeChord.props(numMaxNodes), "Node" + id)
+        context.watch(chordNode)
+        chordNode ! AddNode(id, masterNode)
+        nodesAlive += (id -> chordNode)
+        ids += (chordNode -> id)
+      }
+      log.info("Nodes created: " + nodesAlive.keySet.toString())
+      if (nodeFailurePercentage > 0.0) {
+        nodeFailureTask = context.system.scheduler.schedule(0 milliseconds, 1 second, getRandomNode.ref, PoisonPill)
+      }
+
+    case Subscribe =>
+      log.info("Sending subscriptions...")
+      for ((id, node) <- nodesAlive) {
+        for (_ <- 0 until 5) {
+          val topic = getRandomTopic
+          node ! SendMessage(topic, "SUBSCRIBE", "")
+          val map = new ConcurrentHashMap[Int, Int]
+          map.put(id, -1)
+          stats.put(topic, map)
+          if (!topicSubscribedBy.containsKey(topic)) {
+            topicSubscribedBy.put(topic, new HashSet[Int])
+          }
+          topicSubscribedBy.get(topic).add(id)
+        }
+      }
+
+    case Publish =>
+      log.info("Publishing...")
+      val node = getRandomNode
+      val topic = getRandomTopic
+      val msg = getRandomMessage
+      node.ref ! SendMessage(topic, "PUBLISH", msg)
+      currentNrRequests += 1
+      if (topicSubscribedBy.containsKey(topic)) {
+        currentNrPublishes += topicSubscribedBy.get(topic).size()
+      }
+
+    case CountMessage => currentNrMessages += 1
+
+    case ShowStats =>
+      log.info("Stats:")
+      log.info("  Num messages exchanged: {}", currentNrMessages)
+      // log.info("Avg hops: {}", currentNrHops/currentNrRequests)       //TODO average hops
+      log.info("  Num failed nodes: {}", currentNrFailedNodes)
+      log.info("  M: {}", math.max(3, math.ceil(math.log(numMaxNodes) / math.log(2)).toInt))
+      log.info("  Ring sizes: {}", numMaxNodes)
+      log.info("  Num publishes requests: {}", currentNrRequests)
+
+      var numSubscriptions = 0
+      var numSuccessfulSubscriptions = 0
+      var numPublishesDeliveries = 0
+      stats.values().forEach(m => {
+        m.values().forEach(seq => {
+          if (seq >= -1)
+            numSubscriptions += 1
+          if (seq >= 0)
+            numSuccessfulSubscriptions += 1
+          if (seq > 0)
+            numPublishesDeliveries += seq
+        })
+      })
+
+      log.info("  Num subscriptions requests: {}", numSubscriptions)
+      log.info("  Num successful subscriptions: {} ({}%)", numSuccessfulSubscriptions, (numSuccessfulSubscriptions / numSubscriptions) * 100)
+      log.info("  Num publishes requests: {}", currentNrPublishes)
+      log.info("  Num successful publishes deliveries: {} ({}%)", numPublishesDeliveries, (numPublishesDeliveries / currentNrPublishes) * 100)
+
+    case RegisterEvent(from, to, msgType, topic, topicId, msg) =>
+      if (msgType.equals("SUBSCRIBE")) {
+        val map = stats.get(topic)
+        map.put(from, 0)
+        stats.put(topic, map)
+      }
+
+    case RegisterDelivery(id, topic, message) =>
+      val map = stats.get(topic)
+      if (map != null) {
+        val mapValue = map.get(id)
+        if (mapValue >= 0) {
+          map.put(id, mapValue + 1)
+          stats.put(topic, map)
+        } else log.info("WARNING: GOT MESSAGE AND WASN'T EXPECTING FOR IT....")
+      }
+
     case Terminated(actor: ActorRef) => {
       val id = ids(actor)
       nodesAlive -= id
@@ -181,77 +190,13 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
         nodeFailureTask.cancel()
       }
     }
-    
-    case CountMessage => currentNrMessages += 1
-    
-    case Publish => 
-      if (currentNrRequests <= numRequests) {
-        log.info("Publishing...")
-          val node = getRandomNode
-          val topic = getRandomTopic
-          val msg = getRandomMessage
-          node.ref ! sendMessage(topic, "PUBLISH", msg)
-          //addEventToLog(node.id,-1,"PUBLISH",topic,-1,msg)
-          currentNrRequests += 1
-          if (topicSubscribedBy.containsKey(topic))
-            currentNrPublishes += topicSubscribedBy.get(topic).size()
-      } else {
-        publishTopicsTask.cancel()
-        context.system.scheduler.scheduleOnce(15 seconds, self, ShowStats)
-        log.info("Stopped publishing...")
-      }
-      
-    case Subscribe => initSubscriptions
-    
-    case registerEvent(from, to, msgType, topic, topicId, msg) =>
-      //addEventToLog(from,to,msgType,topic,topicId,msg)
-      if (msgType.equals("SUBSCRIBE")) {
-        var map = stats.get(topic)
-        map.put(from,0)
-        stats.put(topic, map)
-      }
-     
-    case registerDelivery(id, topic, message) =>
-      //logOfEvents.add("<"+id+","+message+">")
-      var map = stats.get(topic)
-      if (map != null) {
-        var mapValue = map.get(id)
-        if (mapValue >= 0) {
-          map.put(id, mapValue+1)
-          stats.put(topic, map)
-        } else log.info("WARNING: GOT MESSAGE AND WASN'T EXPECTING FOR IT....")
-      }
-      
-    //case WriteResults => writeResultsToFile
-    
-    case ShowStats =>
-      log.info("Num messages exchanged: {}", currentNrMessages);
-      log.info("Num failed nodes: {}", currentNrFailedNodes);
-      log.info("Ring sizes: {}", numMaxNodes)
-      log.info("Num publishes requests: {}", currentNrRequests)
-      var numSubscriptions = 0
-      var numSuccessfulSubscriptions = 0
-      var numPublishesDeliveries = 0
-      
-      stats.values().forEach(m => {
-        m.values().forEach(seq => {
-          if (seq >= -1)
-            numSubscriptions += 1
-          if (seq >= 0)
-            numSuccessfulSubscriptions +=1
-          if (seq > 0)
-            numPublishesDeliveries += seq
-        })
-      })
-      
-      log.info("Num subscriptions requests: {}", numSubscriptions)
-      log.info("Num successfull subscriptions: {} ({}%)", numSuccessfulSubscriptions, (numSuccessfulSubscriptions / numSubscriptions) * 100)
-      log.info("Num publishes requests: {}", currentNrPublishes)
-      log.info("Num successfull publishes deliveries: {} ({}%)", numPublishesDeliveries, (numPublishesDeliveries / currentNrPublishes) * 100)
-      
-  }
 
-  /*println("Current number or failed nodes: " + currentNrFailedNodes + " (" + (currentNrFailedNodes/numMaxNodes).toDouble + "%)")
-  println("Total number of messages: " + currentNrMessages + " (" + (currentNrMessages/numRequests).toDouble + "%)")*/
+    case DebugNodes =>
+      for ((_, node) <- nodesAlive) {
+        node ! Debug
+      }
+
+
+  }
 
 }
