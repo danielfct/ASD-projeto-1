@@ -142,7 +142,7 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
       // log.info("Avg hops: {}", currentNrHops/currentNrRequests)       //TODO average hops
       log.info("  Num failed nodes: {}", currentNrFailedNodes)
       log.info("  M: {}", math.max(3, math.ceil(math.log(numMaxNodes) / math.log(2)).toInt))
-      log.info("  Ring sizes: {}", numMaxNodes)
+      log.info("  Ring size: {}", numMaxNodes)
       log.info("  Num publishes requests: {}", currentNrRequests)
 
       var numSubscriptions = 0
@@ -195,7 +195,6 @@ class ChordTester(numMaxNodes: Int, numRequests: Int, nodeFailurePercentage: Flo
       for ((_, node) <- nodesAlive) {
         node ! Debug
       }
-
 
   }
 
