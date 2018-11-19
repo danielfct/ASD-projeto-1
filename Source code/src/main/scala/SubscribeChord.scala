@@ -41,8 +41,8 @@ object SubscribeChord {
 }
 
 class SubscribeChord(numMaxNodes: Int) extends Actor with ActorLogging {
-  var m: Int = math.max(3, math.ceil(math.log(numMaxNodes) / math.log(2)).toInt)
   var ringSize: Int = numMaxNodes
+  var m: Int = math.max(3, math.ceil(math.log(ringSize) / math.log(2)).toInt)
   var masterNode: ActorRef = _
   var selfNode: ChordNode = _
   var fingerTable = new Array[ChordNode](m)
